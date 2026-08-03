@@ -1,0 +1,108 @@
+"""Typed AuraSpec policy schema."""
+
+from __future__ import annotations
+
+import re
+from fnmatch import fnmatchcase
+from pathlib import Path
+from typing import Any, Literal
+
+import yaml
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from aura_runtime.models import AgentEvent, EventKind, Severity
+
+
+class AuraLoader(yaml.SafeLoader):
+    """Safe YAML loader with YAML 1.2 boolean behavior.
+
+    PyYAML defaults to YAML 1.1, where keys such as ``on`` and ``off`` are booleans.
+    AuraSpec uses ``on`` as a policy trigger, so only true/false are treated as booleans.
+    """
+
+
+AuraLoader.yaml_implicit_resolvers = {
+    key: [(tag, pattern) for tag, pattern in resolvers if tag != "tag:yaml.org,2002:bool"]
+    for key, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+AuraLoader.add_implicit_resolver(
+    "tag:yaml.org,2002:bool",
+    re.compile(r"^(?:true|false)$", re.IGNORECASE),
+    list("tTfF"),
+)
+
+
+def value_at_path(value: Any, path: str) -> Any:
+    """Resolve a dotted path through dictionaries and Pydantic models."""
+    current = value
+    for part in path.split("."):
+        if isinstance(current, BaseModel):
+            current = getattr(current, part, None)
+        elif isinstance(current, dict):
+            current = current.get(part)
+        else:
+            return None
+    return current
+
+
+class EventSelector(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event: EventKind
+    tool_matches: list[str] = Field(default_factory=list)
+    where: dict[str, Any] = Field(default_factory=dict)
+    within_events: int | None = Field(default=None, ge=1)
+
+    def matches(self, event: AgentEvent) -> bool:
+        if event.kind != self.event:
+            return False
+        if self.tool_matches and not any(
+            fnmatchcase(event.tool_name or "", pattern) for pattern in self.tool_matches
+        ):
+            return False
+        return all(value_at_path(event, path) == expected for path, expected in self.where.items())
+
+
+class DataConstraint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1)
+    op: Literal["==", "!=", "<", "<=", ">", ">="]
+    value: str | int | float | bool
+    message: str | None = None
+
+
+class Policy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1, pattern=r"^[a-z0-9][a-z0-9._-]*$")
+    description: str
+    severity: Severity = Severity.HIGH
+    on: EventSelector
+    require_prior: EventSelector | None = None
+    constraints: list[DataConstraint] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def has_a_requirement(self) -> Policy:
+        if self.require_prior is None and not self.constraints:
+            raise ValueError("policy must define require_prior or constraints")
+        return self
+
+
+class AuraSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: Literal["0.1"]
+    policies: list[Policy] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def policy_ids_are_unique(self) -> AuraSpec:
+        ids = [policy.id for policy in self.policies]
+        if len(ids) != len(set(ids)):
+            raise ValueError("policy IDs must be unique")
+        return self
+
+    @classmethod
+    def from_yaml(cls, path: str | Path) -> AuraSpec:
+        raw = yaml.load(Path(path).read_text(encoding="utf-8"), Loader=AuraLoader)
+        return cls.model_validate(raw)
