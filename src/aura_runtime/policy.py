@@ -105,5 +105,9 @@ class AuraSpec(BaseModel):
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> AuraSpec:
-        raw = yaml.load(Path(path).read_text(encoding="utf-8"), Loader=AuraLoader)
+        return cls.from_yaml_text(Path(path).read_text(encoding="utf-8"))
+
+    @classmethod
+    def from_yaml_text(cls, content: str) -> AuraSpec:
+        raw = yaml.load(content, Loader=AuraLoader)
         return cls.model_validate(raw)

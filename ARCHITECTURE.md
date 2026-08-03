@@ -37,6 +37,7 @@ flowchart TD
 | `adapters.otel` | OTLP/JSON span normalization |
 | `flight` | Hash-chained MCP transcript and policy decisions |
 | `proxy` | Transparent MCP stdio process boundary |
+| `replay` | Read-only policy replay and behavioral comparison |
 | `mcp_server` | Agent-accessible status and finding tools |
 | `cli` | Local ingestion, verification, and reports |
 
@@ -54,3 +55,15 @@ intercepts a violating `tools/call` request and returns a namespaced JSON-RPC er
 starting the upstream side effect. Policy effects distinguish unconditional denial from
 approval-required decisions. The transcript records both the blocked request and the
 synthetic response, preserving an auditable explanation of what did not execute.
+
+## Replay identity
+
+Replay does not compare regenerated finding IDs or timestamps. A finding's deterministic
+identity is its policy, evidence event, severity, message, and verification engine. Run
+comparison similarly removes run IDs, event IDs, timestamps, sequence counters, and trace
+identifiers before alignment. Protocol-scoped request, session, and tool-call IDs are also
+removed from event payloads. Tool manifests are compared by canonical JSON content.
+
+These normalization rules are deliberately narrow: tool arguments and results remain part
+of behavioral identity, so a changed value produces a divergence. Replay only reads the
+evidence store and never launches a process, calls a tool, or appends new findings.

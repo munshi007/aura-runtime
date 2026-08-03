@@ -22,3 +22,4 @@ jobs:
       - run: uv sync --extra dev
       - run: uv run ruff check .
       - run: uv run pytest --cov=aura_runtime --cov-report=term-missing
+      - run: uv build
