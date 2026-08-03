@@ -192,6 +192,17 @@ def compare_runs(store: SQLiteEventStore, left_run_id: str, right_run_id: str) -
     if not right:
         raise ValueError(f"run {right_run_id!r} has no captured events")
 
+    return compare_event_sequences(left, right, left_run_id, right_run_id)
+
+
+def compare_event_sequences(
+    left: list[AgentEvent],
+    right: list[AgentEvent],
+    left_run_id: str = "baseline",
+    right_run_id: str = "candidate",
+) -> RunDiffReport:
+    """Compare two event sequences after removing execution-scoped identity."""
+
     left_ids = [_event_identity(event) for event in left]
     right_ids = [_event_identity(event) for event in right]
     prefix = 0
@@ -231,12 +242,27 @@ def compare_manifests(
 ) -> ManifestDiffReport:
     left_snapshot = _latest_manifest(store, left_run_id)
     right_snapshot = _latest_manifest(store, right_run_id)
-    left_tools = (
-        {tool.get("name", ""): tool for tool in left_snapshot.tools} if left_snapshot else {}
+    return compare_manifest_tools(
+        left_snapshot.tools if left_snapshot else [],
+        right_snapshot.tools if right_snapshot else [],
+        left_run_id,
+        right_run_id,
+        left_snapshot.content_hash if left_snapshot else None,
+        right_snapshot.content_hash if right_snapshot else None,
     )
-    right_tools = (
-        {tool.get("name", ""): tool for tool in right_snapshot.tools} if right_snapshot else {}
-    )
+
+
+def compare_manifest_tools(
+    left: list[dict[str, Any]],
+    right: list[dict[str, Any]],
+    left_run_id: str = "baseline",
+    right_run_id: str = "candidate",
+    left_manifest_hash: str | None = None,
+    right_manifest_hash: str | None = None,
+) -> ManifestDiffReport:
+    """Compare two concrete MCP tool lists independent of their storage source."""
+    left_tools = {tool.get("name", ""): tool for tool in left}
+    right_tools = {tool.get("name", ""): tool for tool in right}
     left_names = set(left_tools)
     right_names = set(right_tools)
     common = left_names & right_names
@@ -244,8 +270,8 @@ def compare_manifests(
     return ManifestDiffReport(
         left_run_id=left_run_id,
         right_run_id=right_run_id,
-        left_manifest_hash=left_snapshot.content_hash if left_snapshot else None,
-        right_manifest_hash=right_snapshot.content_hash if right_snapshot else None,
+        left_manifest_hash=left_manifest_hash or (_digest(left) if left else None),
+        right_manifest_hash=right_manifest_hash or (_digest(right) if right else None),
         added=sorted(right_names - left_names),
         removed=sorted(left_names - right_names),
         changed=sorted(

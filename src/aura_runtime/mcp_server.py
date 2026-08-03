@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from mcp.server import MCPServer
 
+from aura_runtime.contract import TraceContract, check_contract
 from aura_runtime.flight import verify_protocol_chain
 from aura_runtime.policy import AuraSpec
 from aura_runtime.replay import compare_manifests, compare_runs, replay_run
@@ -77,4 +78,19 @@ def aura_compare_manifests(
 ) -> dict[str, object]:
     """Compare latest MCP tool manifests captured for two runs."""
     report = compare_manifests(SQLiteEventStore(db_path), left_run_id, right_run_id)
+    return report.model_dump(mode="json")
+
+
+@mcp.tool()
+def aura_check_contract(
+    contract_path: str,
+    candidate_run_id: str,
+    db_path: str = ".aura/aura.db",
+) -> dict[str, object]:
+    """Check a captured run against a local Aura trace contract."""
+    report = check_contract(
+        TraceContract.from_yaml(contract_path),
+        SQLiteEventStore(db_path),
+        candidate_run_id,
+    )
     return report.model_dump(mode="json")

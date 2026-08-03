@@ -1,0 +1,10 @@
+version: "0.1"
+name: reference-support-agent
+policy: policy.yaml
+baseline:
+  events: baseline/events.jsonl
+  manifest: baseline/tools.json
+rules:
+  new_findings: deny
+  behavioral_divergence: deny
+  tool_manifest_drift: deny

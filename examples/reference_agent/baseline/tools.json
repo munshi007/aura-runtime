@@ -1,0 +1,56 @@
+{
+  "tools": [
+    {
+      "description": "Return a deterministic customer record.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "customer_id": {"title": "Customer Id", "type": "string"}
+        },
+        "required": ["customer_id"],
+        "title": "search_customerArguments"
+      },
+      "name": "search_customer",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "search_customerDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "description": "Stage a refund for an order.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "order_id": {"title": "Order Id", "type": "string"},
+          "amount": {"title": "Amount", "type": "integer"}
+        },
+        "required": ["order_id", "amount"],
+        "title": "refund_orderArguments"
+      },
+      "name": "refund_order",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "refund_orderDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "description": "Delete a customer record after approval.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "customer_id": {"title": "Customer Id", "type": "string"}
+        },
+        "required": ["customer_id"],
+        "title": "delete_customerArguments"
+      },
+      "name": "delete_customer",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "delete_customerDictOutput",
+        "type": "object"
+      }
+    }
+  ]
+}

@@ -11,6 +11,7 @@ from uuid import uuid4
 import typer
 
 from aura_runtime.adapters.otel import events_from_otlp_json
+from aura_runtime.contract import TraceContract, check_contract
 from aura_runtime.flight import EnforcementMode, MCPFlightRecorder, verify_protocol_chain
 from aura_runtime.models import AgentEvent
 from aura_runtime.policy import AuraSpec
@@ -20,7 +21,11 @@ from aura_runtime.store import SQLiteEventStore
 from aura_runtime.verifier import RuntimeVerifier
 
 app = typer.Typer(help="Deterministic runtime verification for AI agents.", no_args_is_help=True)
+contract_app = typer.Typer(
+    help="Check agent behavior against trace contracts.", no_args_is_help=True
+)
 manifests_app = typer.Typer(help="Compare captured MCP tool manifests.", no_args_is_help=True)
+app.add_typer(contract_app, name="contract")
 app.add_typer(manifests_app, name="manifests")
 DB_OPTION = Annotated[Path, typer.Option("--db", help="Path to the Aura SQLite database.")]
 
@@ -151,6 +156,31 @@ def diff_manifests(
     except ValueError as error:
         raise _as_cli_error(error) from error
     _emit_json(report.model_dump(mode="json"), output)
+
+
+@contract_app.command("check")
+def contract_check(
+    contract_path: Annotated[Path, typer.Argument(exists=True, readable=True)],
+    candidate_run: Annotated[str, typer.Option("--candidate-run")],
+    db: DB_OPTION = Path(".aura/aura.db"),
+    json_output: Annotated[Path | None, typer.Option("--json-output")] = None,
+    markdown_output: Annotated[Path | None, typer.Option("--markdown-output")] = None,
+) -> None:
+    """Check a candidate run against a committed behavioral baseline."""
+    try:
+        report = check_contract(
+            TraceContract.from_yaml(contract_path),
+            SQLiteEventStore(db),
+            candidate_run,
+        )
+    except ValueError as error:
+        raise _as_cli_error(error) from error
+
+    _emit_json(report.model_dump(mode="json"), json_output)
+    if markdown_output is not None:
+        markdown_output.write_text(f"{report.to_markdown()}\n", encoding="utf-8")
+    if report.verdict == "fail":
+        raise typer.Exit(code=2)
 
 
 @app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})

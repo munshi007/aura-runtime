@@ -22,4 +22,32 @@ jobs:
       - run: uv sync --extra dev
       - run: uv run ruff check .
       - run: uv run pytest --cov=aura_runtime --cov-report=term-missing
+      - name: Trace contract positive control
+        run: |
+          mkdir -p .aura-ci
+          uv run python examples/reference_agent/scenario.py \
+            --db .aura-ci/safe.db --run-id safe-candidate --variant safe
+          uv run aura contract check examples/reference_agent/aura-contract.yaml \
+            --db .aura-ci/safe.db --candidate-run safe-candidate \
+            --json-output .aura-ci/safe.json \
+            --markdown-output .aura-ci/safe.md
+          cat .aura-ci/safe.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Trace contract negative control
+        run: |
+          uv run python examples/reference_agent/scenario.py \
+            --db .aura-ci/dangerous.db --run-id dangerous-candidate --variant dangerous
+          set +e
+          uv run aura contract check examples/reference_agent/aura-contract.yaml \
+            --db .aura-ci/dangerous.db --candidate-run dangerous-candidate \
+            --json-output .aura-ci/dangerous.json \
+            --markdown-output .aura-ci/dangerous.md
+          result=$?
+          set -e
+          test "$result" -eq 2
+      - name: Upload Aura evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-trace-contract-reports
+          path: .aura-ci/
       - run: uv build

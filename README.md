@@ -64,6 +64,23 @@ Replay reports separate introduced, resolved, and unchanged findings. Run diffs 
 the common prefix and first divergent event while ignoring timestamps, generated IDs, and
 run IDs. Manifest diffs detect added, removed, and schema-changed tools.
 
+## Trace Contract CI
+
+Commit a known-good behavioral baseline and check every candidate agent run in CI:
+
+```bash
+uv run aura contract check examples/reference_agent/aura-contract.yaml \
+  --db candidate.db \
+  --candidate-run candidate \
+  --json-output aura-report.json \
+  --markdown-output aura-report.md
+```
+
+The command exits `2` when contract rules reject new findings, behavioral divergence, or
+tool-manifest drift. The bundled reference agent is exercised through the real MCP stdio
+proxy in GitHub Actions; its JSON report, Markdown summary, and evidence database are
+uploaded as workflow artifacts. No model or API key is required.
+
 Run the MCP server with the official MCP SDK CLI:
 
 ```bash
@@ -100,5 +117,5 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the system boundary and
 
 ## Status
 
-`0.3.0a1` is a research-grade foundation. The next milestones are online LTLf monitors,
+`0.4.0a1` is a research-grade foundation. The next milestones are online LTLf monitors,
 object-centric process discovery, causal conformance checking, and OCEL 2.0 export.
