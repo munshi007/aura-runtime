@@ -3,6 +3,7 @@ policies:
   - id: destructive-tools-require-approval
     description: A destructive tool call must be preceded by explicit human approval.
     severity: critical
+    effect: require_approval
     on:
       event: tool.call.requested
       tool_matches: ["delete_*", "drop_*"]
@@ -23,4 +24,3 @@ policies:
         op: "<="
         value: 10000
         message: Transfer amount exceeds the automated execution limit.
-

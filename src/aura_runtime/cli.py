@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Annotated
+from uuid import uuid4
 
 import typer
 
 from aura_runtime.adapters.otel import events_from_otlp_json
+from aura_runtime.flight import EnforcementMode, MCPFlightRecorder, verify_protocol_chain
 from aura_runtime.models import AgentEvent
 from aura_runtime.policy import AuraSpec
+from aura_runtime.proxy import run_stdio_proxy
 from aura_runtime.store import SQLiteEventStore
 from aura_runtime.verifier import RuntimeVerifier
 
@@ -73,13 +77,47 @@ def report(
 ) -> None:
     store = SQLiteEventStore(db)
     findings = store.findings(run_id)
+    protocol_records = store.protocol_records(run_id)
     output = {
         "run_id": run_id,
         "event_count": len(store.events(run_id)),
         "finding_count": len(findings),
+        "protocol_record_count": len(protocol_records),
+        "manifest_count": len(store.manifests(run_id)),
+        "transcript_integrity": verify_protocol_chain(protocol_records),
         "findings": [finding.model_dump(mode="json") for finding in findings],
     }
     typer.echo(json.dumps(output, indent=2))
+
+
+@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def proxy(
+    context: typer.Context,
+    policy: Annotated[Path | None, typer.Option("--policy", exists=True, readable=True)] = None,
+    mode: Annotated[EnforcementMode, typer.Option("--mode")] = EnforcementMode.OBSERVE,
+    db: DB_OPTION = Path(".aura/aura.db"),
+    run_id: Annotated[str | None, typer.Option("--run-id")] = None,
+) -> None:
+    """Record and optionally gate an upstream MCP stdio server."""
+    command = list(context.args)
+    if command and command[0] == "--":
+        command = command[1:]
+    if not command:
+        raise typer.BadParameter("pass an upstream command after --")
+    if mode == EnforcementMode.ENFORCE and policy is None:
+        raise typer.BadParameter("--mode enforce requires --policy")
+
+    store = SQLiteEventStore(db)
+    spec = AuraSpec.from_yaml(policy) if policy else None
+    recorder = MCPFlightRecorder(
+        run_id=run_id or f"mcp-{uuid4()}",
+        store=store,
+        spec=spec,
+        mode=mode,
+    )
+    exit_code = asyncio.run(run_stdio_proxy(command, recorder))
+    if exit_code:
+        raise typer.Exit(exit_code)
 
 
 if __name__ == "__main__":

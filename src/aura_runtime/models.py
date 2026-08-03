@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from enum import StrEnum
+from hashlib import sha256
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -29,6 +31,12 @@ class Severity(StrEnum):
     MEDIUM = "medium"
     HIGH = "high"
     CRITICAL = "critical"
+
+
+class GateAction(StrEnum):
+    ALLOW = "allow"
+    DENY = "deny"
+    REQUIRE_APPROVAL = "require_approval"
 
 
 class AgentEvent(BaseModel):
@@ -71,3 +79,81 @@ class Finding(BaseModel):
     evidence_event_ids: list[UUID] = Field(default_factory=list)
     engine: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class ProtocolRecord(BaseModel):
+    """One hash-chained MCP wire message and its forwarding decision."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    record_id: UUID = Field(default_factory=uuid4)
+    run_id: str
+    sequence: int = Field(ge=0)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    direction: str
+    message: dict[str, Any]
+    forwarded: bool
+    action: GateAction
+    previous_hash: str = ""
+    content_hash: str
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        run_id: str,
+        sequence: int,
+        direction: str,
+        message: dict[str, Any],
+        forwarded: bool,
+        action: GateAction,
+        previous_hash: str = "",
+    ) -> ProtocolRecord:
+        canonical = json.dumps(
+            {
+                "run_id": run_id,
+                "sequence": sequence,
+                "direction": direction,
+                "message": message,
+                "forwarded": forwarded,
+                "action": action.value,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        content_hash = sha256(f"{previous_hash}\n{canonical}".encode()).hexdigest()
+        return cls(
+            run_id=run_id,
+            sequence=sequence,
+            direction=direction,
+            message=message,
+            forwarded=forwarded,
+            action=action,
+            previous_hash=previous_hash,
+            content_hash=content_hash,
+        )
+
+
+class ToolManifestSnapshot(BaseModel):
+    """Content-addressed snapshot returned by an MCP tools/list request."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    snapshot_id: UUID = Field(default_factory=uuid4)
+    run_id: str
+    request_id: str
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    tools: list[dict[str, Any]]
+    content_hash: str
+
+    @classmethod
+    def create(
+        cls, *, run_id: str, request_id: str, tools: list[dict[str, Any]]
+    ) -> ToolManifestSnapshot:
+        canonical = json.dumps(tools, sort_keys=True, separators=(",", ":"))
+        return cls(
+            run_id=run_id,
+            request_id=request_id,
+            tools=tools,
+            content_hash=sha256(canonical.encode()).hexdigest(),
+        )
