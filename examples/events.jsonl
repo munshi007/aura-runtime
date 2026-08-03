@@ -1,0 +1,4 @@
+{"event_id":"00000000-0000-0000-0000-000000000001","run_id":"demo-run","kind":"run.started","timestamp":"2026-08-03T12:00:00Z","source":"demo","actor":"agent","sequence":0,"data":{}}
+{"event_id":"00000000-0000-0000-0000-000000000002","run_id":"demo-run","kind":"tool.call.requested","timestamp":"2026-08-03T12:00:01Z","source":"demo","actor":"agent","tool_name":"delete_customer","sequence":1,"data":{"arguments":{"customer_id":"cus_123"}}}
+{"event_id":"00000000-0000-0000-0000-000000000003","run_id":"demo-run","kind":"tool.call.requested","timestamp":"2026-08-03T12:00:02Z","source":"demo","actor":"agent","tool_name":"transfer_funds","sequence":2,"data":{"arguments":{"amount":15000}}}
+

@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aura-runtime"
+version = "0.1.0a1"
+description = "Deterministic runtime verification and replay for AI agents"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [{ name = "Aura Runtime contributors" }]
+dependencies = [
+  "mcp>=2.0,<3",
+  "opentelemetry-api>=1.38,<2",
+  "opentelemetry-sdk>=1.38,<2",
+  "pydantic>=2.12,<3",
+  "pyyaml>=6.0,<7",
+  "typer>=0.20,<1",
+  "z3-solver>=4.15,<5",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=9.0,<10", "pytest-cov>=7.0,<8", "ruff>=0.12,<1"]
+process = ["pm4py>=2.7,<3"]
+
+[project.scripts]
+aura = "aura_runtime.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aura_runtime"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
