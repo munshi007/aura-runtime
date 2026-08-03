@@ -38,6 +38,7 @@ flowchart TD
 | `flight` | Hash-chained MCP transcript and policy decisions |
 | `proxy` | Transparent MCP stdio process boundary |
 | `replay` | Read-only policy replay and behavioral comparison |
+| `contract` | CI regression verdicts over committed baselines |
 | `mcp_server` | Agent-accessible status and finding tools |
 | `cli` | Local ingestion, verification, and reports |
 
@@ -67,3 +68,14 @@ removed from event payloads. Tool manifests are compared by canonical JSON conte
 These normalization rules are deliberately narrow: tool arguments and results remain part
 of behavioral identity, so a changed value produces a divergence. Replay only reads the
 evidence store and never launches a process, calls a tool, or appends new findings.
+
+## Trace contracts
+
+A trace contract binds an AuraSpec policy, baseline event fixture, baseline MCP manifest,
+and allow/deny rules. Candidate evidence remains in its own SQLite store. Contract checking
+normalizes execution-scoped identity, evaluates both event streams under the same policy,
+and produces one verdict from three independent signals: new findings, event divergence,
+and tool-manifest drift.
+
+The contract engine itself is read-only. Scenario execution is a separate CI step through
+the flight recorder, which keeps capture and judgment independently testable.
