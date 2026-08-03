@@ -35,6 +35,8 @@ flowchart TD
 | `verifier` | Temporal checks and Z3-backed data constraints |
 | `adapters.mcp` | MCP JSON-RPC normalization and correlation |
 | `adapters.otel` | OTLP/JSON span normalization |
+| `flight` | Hash-chained MCP transcript and policy decisions |
+| `proxy` | Transparent MCP stdio process boundary |
 | `mcp_server` | Agent-accessible status and finding tools |
 | `cli` | Local ingestion, verification, and reports |
 
@@ -45,3 +47,10 @@ compatible with compiling richer temporal clauses into finite-state monitors. SQ
 the local default; a storage protocol will allow Postgres or an immutable object store
 without changing verification semantics.
 
+## Flight-recorder decision boundary
+
+`observe` mode records findings but forwards every valid MCP message. `enforce` mode
+intercepts a violating `tools/call` request and returns a namespaced JSON-RPC error without
+starting the upstream side effect. Policy effects distinguish unconditional denial from
+approval-required decisions. The transcript records both the blocked request and the
+synthetic response, preserving an auditable explanation of what did not execute.

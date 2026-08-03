@@ -86,10 +86,18 @@ class RuntimeVerifier:
         for event in events:
             if history and event.run_id != history[0].run_id:
                 raise ValueError("verify() accepts events from exactly one run")
-            for policy in self.spec.policies:
-                if policy.on.matches(event):
-                    findings.extend(self._evaluate_policy(policy, event, history))
+            findings.extend(self.verify_event(event, history))
             history.append(event)
+        return findings
+
+    def verify_event(self, event: AgentEvent, history: list[AgentEvent]) -> list[Finding]:
+        """Evaluate one prospective event against prior evidence only."""
+        if history and event.run_id != history[0].run_id:
+            raise ValueError("event and history must belong to the same run")
+        findings: list[Finding] = []
+        for policy in self.spec.policies:
+            if policy.on.matches(event):
+                findings.extend(self._evaluate_policy(policy, event, history))
         return findings
 
     def _evaluate_policy(

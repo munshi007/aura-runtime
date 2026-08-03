@@ -1,6 +1,7 @@
 """Aura Runtime public API."""
 
-from aura_runtime.models import AgentEvent, EventKind, Finding, Severity
+from aura_runtime.flight import EnforcementMode, MCPFlightRecorder
+from aura_runtime.models import AgentEvent, EventKind, Finding, GateAction, Severity
 from aura_runtime.policy import AuraSpec
 from aura_runtime.store import SQLiteEventStore
 from aura_runtime.verifier import RuntimeVerifier
@@ -9,10 +10,13 @@ __all__ = [
     "AgentEvent",
     "AuraSpec",
     "EventKind",
+    "EnforcementMode",
     "Finding",
+    "GateAction",
+    "MCPFlightRecorder",
     "RuntimeVerifier",
     "SQLiteEventStore",
     "Severity",
 ]
 
-__version__ = "0.1.0a1"
+__version__ = "0.2.0a1"

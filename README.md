@@ -22,6 +22,7 @@ Aura's first vertical slice provides:
 - Z3-backed constraints over tool arguments and state;
 - deterministic findings with evidence event IDs;
 - a Typer CLI and an MCP server for querying the runtime.
+- a transparent MCP stdio flight recorder with optional enforcement.
 
 ## Quick start
 
@@ -31,6 +32,24 @@ uv run aura init
 uv run aura check examples/events.jsonl --policy examples/policy.yaml
 uv run aura report demo-run
 ```
+
+Wrap any stdio MCP server in observe-only mode:
+
+```bash
+uv run aura proxy --policy examples/policy.yaml --mode observe -- \
+  uv run mcp run path/to/upstream_server.py
+```
+
+Enable deterministic blocking only after reviewing the recorded behavior:
+
+```bash
+uv run aura proxy --policy examples/policy.yaml --mode enforce -- \
+  uv run mcp run path/to/upstream_server.py
+```
+
+The proxy writes no logs to stdout: that stream remains valid newline-delimited MCP
+JSON-RPC. Every request, response, forwarding decision, and tool-manifest snapshot is
+stored in SQLite. Transcript records form a SHA-256 hash chain so tampering is detectable.
 
 Run the MCP server with the official MCP SDK CLI:
 
@@ -68,6 +87,5 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the system boundary and
 
 ## Status
 
-`0.1.0a1` is a research-grade foundation. The next milestones are online LTLf monitors,
+`0.2.0a1` is a research-grade foundation. The next milestones are online LTLf monitors,
 object-centric process discovery, conformance checking, and counterfactual replay.
-

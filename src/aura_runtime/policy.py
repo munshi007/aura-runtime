@@ -78,6 +78,7 @@ class Policy(BaseModel):
     id: str = Field(min_length=1, pattern=r"^[a-z0-9][a-z0-9._-]*$")
     description: str
     severity: Severity = Severity.HIGH
+    effect: Literal["deny", "require_approval"] = "deny"
     on: EventSelector
     require_prior: EventSelector | None = None
     constraints: list[DataConstraint] = Field(default_factory=list)

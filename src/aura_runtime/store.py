@@ -7,7 +7,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from uuid import UUID
 
-from aura_runtime.models import AgentEvent, Finding
+from aura_runtime.models import AgentEvent, Finding, ProtocolRecord, ToolManifestSnapshot
 
 
 class SQLiteEventStore:
@@ -47,6 +47,28 @@ class SQLiteEventStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_findings_run
                     ON findings(run_id, created_at, finding_id);
+
+                CREATE TABLE IF NOT EXISTS protocol_records (
+                    record_id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    sequence INTEGER NOT NULL,
+                    content_hash TEXT NOT NULL UNIQUE,
+                    payload TEXT NOT NULL,
+                    UNIQUE(run_id, sequence)
+                );
+                CREATE INDEX IF NOT EXISTS idx_protocol_records_run
+                    ON protocol_records(run_id, sequence);
+
+                CREATE TABLE IF NOT EXISTS tool_manifests (
+                    snapshot_id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    request_id TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    content_hash TEXT NOT NULL,
+                    payload TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_tool_manifests_run
+                    ON tool_manifests(run_id, timestamp, snapshot_id);
                 """
             )
 
@@ -118,3 +140,66 @@ class SQLiteEventStore:
                 "SELECT 1 FROM events WHERE event_id = ?", (str(event_id),)
             ).fetchone()
         return row is not None
+
+    def append_protocol_record(self, record: ProtocolRecord) -> None:
+        self.initialize()
+        with self.connect() as connection:
+            connection.execute(
+                """INSERT INTO protocol_records(
+                       record_id, run_id, sequence, content_hash, payload
+                   ) VALUES (?, ?, ?, ?, ?)""",
+                (
+                    str(record.record_id),
+                    record.run_id,
+                    record.sequence,
+                    record.content_hash,
+                    record.model_dump_json(),
+                ),
+            )
+
+    def protocol_records(self, run_id: str) -> list[ProtocolRecord]:
+        self.initialize()
+        with self.connect() as connection:
+            rows = connection.execute(
+                """SELECT payload FROM protocol_records WHERE run_id = ?
+                   ORDER BY sequence""",
+                (run_id,),
+            ).fetchall()
+        return [ProtocolRecord.model_validate_json(row["payload"]) for row in rows]
+
+    def last_protocol_hash(self, run_id: str) -> str:
+        self.initialize()
+        with self.connect() as connection:
+            row = connection.execute(
+                """SELECT content_hash FROM protocol_records WHERE run_id = ?
+                   ORDER BY sequence DESC LIMIT 1""",
+                (run_id,),
+            ).fetchone()
+        return str(row["content_hash"]) if row else ""
+
+    def append_manifest(self, snapshot: ToolManifestSnapshot) -> None:
+        self.initialize()
+        with self.connect() as connection:
+            connection.execute(
+                """INSERT INTO tool_manifests(
+                       snapshot_id, run_id, request_id, timestamp, content_hash, payload
+                   ) VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    str(snapshot.snapshot_id),
+                    snapshot.run_id,
+                    snapshot.request_id,
+                    snapshot.timestamp.isoformat(),
+                    snapshot.content_hash,
+                    snapshot.model_dump_json(),
+                ),
+            )
+
+    def manifests(self, run_id: str) -> list[ToolManifestSnapshot]:
+        self.initialize()
+        with self.connect() as connection:
+            rows = connection.execute(
+                """SELECT payload FROM tool_manifests WHERE run_id = ?
+                   ORDER BY rowid""",
+                (run_id,),
+            ).fetchall()
+        return [ToolManifestSnapshot.model_validate_json(row["payload"]) for row in rows]
