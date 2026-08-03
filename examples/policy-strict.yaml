@@ -1,0 +1,26 @@
+version: "0.1"
+policies:
+  - id: destructive-tools-require-approval
+    description: A destructive tool call must be preceded by explicit human approval.
+    severity: critical
+    effect: require_approval
+    on:
+      event: tool.call.requested
+      tool_matches: ["delete_*", "drop_*"]
+    require_prior:
+      event: human.approval
+      within_events: 20
+      where:
+        data.approved: true
+
+  - id: strict-transfer-limit
+    description: Counterfactual policy with a lower automated transfer limit.
+    severity: high
+    on:
+      event: tool.call.requested
+      tool_matches: ["transfer_funds"]
+    constraints:
+      - path: data.arguments.amount
+        op: "<="
+        value: 5000
+        message: Transfer amount exceeds the strict execution limit.

@@ -15,11 +15,26 @@ from aura_runtime.flight import EnforcementMode, MCPFlightRecorder, verify_proto
 from aura_runtime.models import AgentEvent
 from aura_runtime.policy import AuraSpec
 from aura_runtime.proxy import run_stdio_proxy
+from aura_runtime.replay import compare_manifests, compare_runs, replay_run
 from aura_runtime.store import SQLiteEventStore
 from aura_runtime.verifier import RuntimeVerifier
 
 app = typer.Typer(help="Deterministic runtime verification for AI agents.", no_args_is_help=True)
+manifests_app = typer.Typer(help="Compare captured MCP tool manifests.", no_args_is_help=True)
+app.add_typer(manifests_app, name="manifests")
 DB_OPTION = Annotated[Path, typer.Option("--db", help="Path to the Aura SQLite database.")]
+
+
+def _emit_json(value: object, output: Path | None = None) -> None:
+    content = json.dumps(value, indent=2)
+    if output is None:
+        typer.echo(content)
+    else:
+        output.write_text(f"{content}\n", encoding="utf-8")
+
+
+def _as_cli_error(error: ValueError) -> typer.BadParameter:
+    return typer.BadParameter(str(error))
 
 
 @app.command("init")
@@ -87,7 +102,55 @@ def report(
         "transcript_integrity": verify_protocol_chain(protocol_records),
         "findings": [finding.model_dump(mode="json") for finding in findings],
     }
-    typer.echo(json.dumps(output, indent=2))
+    _emit_json(output)
+
+
+@app.command("replay")
+def replay_command(
+    run_id: Annotated[str, typer.Argument()],
+    policy: Annotated[Path, typer.Option("--policy", exists=True, readable=True)],
+    db: DB_OPTION = Path(".aura/aura.db"),
+    output: Annotated[Path | None, typer.Option("--output")] = None,
+    fail_on_new: Annotated[bool, typer.Option("--fail-on-new")] = False,
+) -> None:
+    """Re-evaluate captured evidence without executing any tool."""
+    try:
+        report = replay_run(SQLiteEventStore(db), run_id, AuraSpec.from_yaml(policy))
+    except ValueError as error:
+        raise _as_cli_error(error) from error
+    _emit_json(report.model_dump(mode="json"), output)
+    if fail_on_new and report.introduced:
+        raise typer.Exit(code=2)
+
+
+@app.command("diff")
+def diff_runs(
+    left_run_id: Annotated[str, typer.Argument()],
+    right_run_id: Annotated[str, typer.Argument()],
+    db: DB_OPTION = Path(".aura/aura.db"),
+    output: Annotated[Path | None, typer.Option("--output")] = None,
+) -> None:
+    """Locate the first behavioral divergence between two captured runs."""
+    try:
+        report = compare_runs(SQLiteEventStore(db), left_run_id, right_run_id)
+    except ValueError as error:
+        raise _as_cli_error(error) from error
+    _emit_json(report.model_dump(mode="json"), output)
+
+
+@manifests_app.command("diff")
+def diff_manifests(
+    left_run_id: Annotated[str, typer.Argument()],
+    right_run_id: Annotated[str, typer.Argument()],
+    db: DB_OPTION = Path(".aura/aura.db"),
+    output: Annotated[Path | None, typer.Option("--output")] = None,
+) -> None:
+    """Compare the latest tool-manifest snapshots for two runs."""
+    try:
+        report = compare_manifests(SQLiteEventStore(db), left_run_id, right_run_id)
+    except ValueError as error:
+        raise _as_cli_error(error) from error
+    _emit_json(report.model_dump(mode="json"), output)
 
 
 @app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})

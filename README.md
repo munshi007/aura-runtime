@@ -51,6 +51,19 @@ The proxy writes no logs to stdout: that stream remains valid newline-delimited 
 JSON-RPC. Every request, response, forwarding decision, and tool-manifest snapshot is
 stored in SQLite. Transcript records form a SHA-256 hash chain so tampering is detectable.
 
+Replay historical evidence against a changed policy without invoking an upstream server:
+
+```bash
+uv run aura replay demo-run --policy examples/policy-strict.yaml
+uv run aura replay demo-run --policy examples/policy-strict.yaml --fail-on-new
+uv run aura diff baseline-run candidate-run
+uv run aura manifests diff baseline-run candidate-run
+```
+
+Replay reports separate introduced, resolved, and unchanged findings. Run diffs identify
+the common prefix and first divergent event while ignoring timestamps, generated IDs, and
+run IDs. Manifest diffs detect added, removed, and schema-changed tools.
+
 Run the MCP server with the official MCP SDK CLI:
 
 ```bash
@@ -87,5 +100,5 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the system boundary and
 
 ## Status
 
-`0.2.0a1` is a research-grade foundation. The next milestones are online LTLf monitors,
-object-centric process discovery, conformance checking, and counterfactual replay.
+`0.3.0a1` is a research-grade foundation. The next milestones are online LTLf monitors,
+object-centric process discovery, causal conformance checking, and OCEL 2.0 export.
