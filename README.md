@@ -60,6 +60,18 @@ uv run aura diff baseline-run candidate-run
 uv run aura manifests diff baseline-run candidate-run
 ```
 
+Run a real external agent through the same boundary using the bundled
+[Goose integration](examples/goose/README.md):
+
+```bash
+uv run python examples/goose/run.py safe
+uv run python examples/goose/run.py dangerous
+```
+
+The Goose recipes exercise a known-good tool sequence and an unapproved destructive
+regression without modifying or vendoring Goose. Aura retains the MCP evidence and checks
+both runs against the committed trace contract.
+
 Replay reports separate introduced, resolved, and unchanged findings. Run diffs identify
 the common prefix and first divergent event while ignoring timestamps, generated IDs, and
 run IDs. Manifest diffs detect added, removed, and schema-changed tools.
