@@ -39,6 +39,16 @@ class GateAction(StrEnum):
     REQUIRE_APPROVAL = "require_approval"
 
 
+class ObjectRef(BaseModel):
+    """Qualified link from an event to one business object."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    object_type: str = Field(min_length=1)
+    object_id: str = Field(min_length=1)
+    qualifier: str = Field(default="related", min_length=1)
+
+
 class AgentEvent(BaseModel):
     """One immutable fact observed during an agent execution."""
 
@@ -55,6 +65,7 @@ class AgentEvent(BaseModel):
     parent_event_id: UUID | None = None
     trace_id: str | None = None
     span_id: str | None = None
+    objects: list[ObjectRef] = Field(default_factory=list)
     data: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("timestamp")

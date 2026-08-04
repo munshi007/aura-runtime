@@ -40,6 +40,17 @@ def completion_spec() -> AuraSpec:
                     },
                 }
             ],
+            "object_bindings": [
+                {
+                    "on": {
+                        "event": "tool.call.requested",
+                        "tool_matches": ["lookup"],
+                    },
+                    "object_type": "customer",
+                    "id_path": "data.arguments.customer_id",
+                    "qualifier": "subject",
+                }
+            ],
         }
     )
 
@@ -127,6 +138,10 @@ def test_flight_recorder_monitors_server_responses_online(tmp_path) -> None:
     assert report.pending_obligation_count == 0
     assert report.satisfied_obligation_count == 1
     assert store.findings("run-1") == []
+    requested = store.events("run-1")[0]
+    assert requested.objects[0].object_type == "customer"
+    assert requested.objects[0].object_id == "cus_123"
+    assert requested.objects[0].qualifier == "subject"
 
 
 def test_hash_chain_detects_tampering(tmp_path) -> None:

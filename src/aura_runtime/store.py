@@ -122,6 +122,16 @@ class SQLiteEventStore:
             ).fetchall()
         return [AgentEvent.model_validate_json(row["payload"]) for row in rows]
 
+    def all_events(self) -> list[AgentEvent]:
+        """Return every event in deterministic cross-run order."""
+        self.initialize()
+        with self.connect() as connection:
+            rows = connection.execute(
+                """SELECT payload FROM events
+                   ORDER BY timestamp, run_id, sequence IS NULL, sequence, event_id"""
+            ).fetchall()
+        return [AgentEvent.model_validate_json(row["payload"]) for row in rows]
+
     def findings(self, run_id: str) -> list[Finding]:
         self.initialize()
         with self.connect() as connection:

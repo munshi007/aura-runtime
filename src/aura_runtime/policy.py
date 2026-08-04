@@ -10,7 +10,7 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from aura_runtime.models import AgentEvent, EventKind, Severity
+from aura_runtime.models import AgentEvent, EventKind, ObjectRef, Severity
 
 
 class AuraLoader(yaml.SafeLoader):
@@ -82,6 +82,38 @@ class DataConstraint(BaseModel):
     message: str | None = None
 
 
+class ObjectBinding(BaseModel):
+    """Declaratively extract a qualified business-object link from an event."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    on: EventSelector
+    object_type: str = Field(min_length=1)
+    id_path: str = Field(min_length=1)
+    qualifier: str = Field(default="related", min_length=1)
+
+    @model_validator(mode="after")
+    def selector_is_local(self) -> ObjectBinding:
+        if self.on.correlate:
+            raise ValueError("object binding selectors cannot define correlate")
+        return self
+
+    def extract(self, event: AgentEvent) -> ObjectRef | None:
+        if not self.on.matches(event):
+            return None
+        value = value_at_path(event, self.id_path)
+        if isinstance(value, bool) or not isinstance(value, (str, int)):
+            return None
+        object_id = str(value)
+        if not object_id:
+            return None
+        return ObjectRef(
+            object_type=self.object_type,
+            object_id=object_id,
+            qualifier=self.qualifier,
+        )
+
+
 class Policy(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -110,6 +142,7 @@ class AuraSpec(BaseModel):
 
     version: Literal["0.1"]
     policies: list[Policy] = Field(min_length=1)
+    object_bindings: list[ObjectBinding] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def policy_ids_are_unique(self) -> AuraSpec:
@@ -117,6 +150,21 @@ class AuraSpec(BaseModel):
         if len(ids) != len(set(ids)):
             raise ValueError("policy IDs must be unique")
         return self
+
+    def bind_objects(self, event: AgentEvent) -> AgentEvent:
+        """Return the event with declaratively extracted object references added."""
+        references = [
+            *event.objects,
+            *[
+                reference
+                for binding in self.object_bindings
+                if (reference := binding.extract(event)) is not None
+            ],
+        ]
+        unique = {
+            (item.object_type, item.object_id, item.qualifier): item for item in references
+        }
+        return event.model_copy(update={"objects": [unique[key] for key in sorted(unique)]})
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> AuraSpec:

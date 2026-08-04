@@ -18,8 +18,9 @@ executions against executable behavioral contracts.
 6. **Partial-order causality** — preserve trace ancestry and object links so concurrent
    actions are not misrepresented as one arbitrary total order.
 
-The current alpha implements the evidence boundary, bounded temporal prerequisites,
-three-valued bounded future-response monitors, SMT-backed concrete constraints, and a first
-partial-order causal graph for MCP requests, responses, and subscriptions. It does not yet
-claim arbitrary LTLf parsing or compilation. Richer temporal formulae, object links, and
-discovered concurrency relations remain explicit extension milestones.
+The current alpha implements the evidence boundary, qualified event-to-object links,
+privacy-safe OCEL 2.0 exchange, bounded temporal prerequisites, three-valued bounded
+future-response monitors, SMT-backed concrete constraints, and a first partial-order causal
+graph for MCP requests, responses, and subscriptions. It does not yet claim arbitrary LTLf
+parsing, object-centric process discovery, or inferred concurrency. Those remain explicit
+extension milestones.
