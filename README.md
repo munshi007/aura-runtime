@@ -19,6 +19,7 @@ Aura's first vertical slice provides:
 - an append-only, SQLite-backed canonical agent event log;
 - MCP JSON-RPC and OTLP/JSON adapters;
 - declarative `AuraSpec` policies with temporal prerequisites;
+- exact LTLf progression monitors with four-valued prefix verdicts;
 - Z3-backed constraints over tool arguments and state;
 - deterministic findings with evidence event IDs;
 - a Typer CLI and an MCP server for querying the runtime.
@@ -157,6 +158,28 @@ Inspect a captured prefix with `aura temporal-state <run-id> --policy aura.yaml`
 `--final` only when the prefix should be interpreted as a complete finite trace. See
 [finite-trace temporal monitoring](docs/temporal-monitoring.md).
 
+For general finite-trace properties, bind named propositions to the same event selectors:
+
+```yaml
+ltlf_policies:
+  - id: no-unapproved-delete
+    description: Deletion never occurs before approval
+    formula: "(!delete) U approval"
+    propositions:
+      delete:
+        event: tool.call.requested
+        tool_matches: [delete_*]
+      approval:
+        event: human.approval
+        where:
+          data.approved: true
+```
+
+Aura supports Boolean operators plus strong/weak next (`X`, `Xw`), eventually (`F`),
+always (`G`), until (`U`), and release (`R`). Inspect a prefix with
+`aura ltlf-state <run-id> --policy aura.yaml`; use `--final` to obtain the finite-trace
+pass/fail verdict. See [general LTLf monitoring](docs/ltlf-monitoring.md).
+
 Canonical events can link actions to qualified business objects such as customers,
 documents, tickets, or repositories. Export one or many runs as an OCEL 2.0 object-centric
 event log without exporting event payloads or raw identifiers by default:
@@ -224,6 +247,6 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the system boundary and
 
 ## Status
 
-`0.12.0a1` is a research-grade foundation. The next milestones are general LTLf-to-automata
-compilation, signed evidence bundles, and richer conformance beyond directly-follows
-structure.
+`0.13.0a1` is a research-grade foundation. The next milestones are signed evidence
+bundles, symbolic proposition handling for larger formulas, and richer conformance beyond
+directly-follows structure.

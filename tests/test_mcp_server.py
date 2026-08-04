@@ -122,10 +122,32 @@ policies:
                     "db_path": str(db_path),
                 },
             )
+            ltlf = await client.call_tool(
+                "aura_ltlf_state",
+                {
+                    "run_id": "replay-run",
+                    "policy_yaml": """
+version: "0.1"
+ltlf_policies:
+  - id: no-transfer
+    description: Transfer never occurs
+    formula: G !transfer
+    propositions:
+      transfer:
+        event: tool.call.requested
+        tool_matches: [transfer_funds]
+""",
+                    "db_path": str(db_path),
+                },
+            )
         assert replay.structured_content["read_only"] is True
         assert replay.structured_content["replayed_finding_count"] == 1
         assert temporal.structured_content["pending_obligation_count"] == 1
         assert temporal.structured_content["content_included"] is False
+        assert ltlf.structured_content["content_included"] is False
+        assert ltlf.structured_content["policies"][0]["monitor"]["prefix_verdict"] == (
+            "permanently_violated"
+        )
 
     asyncio.run(call_status())
 
@@ -199,6 +221,7 @@ def test_mcp_evidence_tools_declare_read_only_annotations() -> None:
                 "aura_conformance",
                 "aura_explain_issue",
                 "aura_temporal_state",
+                "aura_ltlf_state",
                 "aura_object_contract",
                 "aura_object_state",
             }
@@ -208,6 +231,7 @@ def test_mcp_evidence_tools_declare_read_only_annotations() -> None:
             "aura_conformance",
             "aura_explain_issue",
             "aura_temporal_state",
+            "aura_ltlf_state",
             "aura_object_contract",
             "aura_object_state",
         }

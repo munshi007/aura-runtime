@@ -10,6 +10,8 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from aura_runtime.ltlf import atoms as ltlf_atoms
+from aura_runtime.ltlf import parse_ltlf
 from aura_runtime.models import AgentEvent, EventKind, ObjectRef, Severity
 
 
@@ -137,16 +139,44 @@ class Policy(BaseModel):
         return self
 
 
+class LTLfPolicy(BaseModel):
+    """A general finite-trace formula over named event selectors."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1, pattern=r"^[a-z0-9][a-z0-9._-]*$")
+    description: str
+    severity: Severity = Severity.HIGH
+    effect: Literal["deny", "require_approval"] = "deny"
+    formula: str = Field(min_length=1)
+    propositions: dict[str, EventSelector] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def formula_is_bound(self) -> LTLfPolicy:
+        parsed = parse_ltlf(self.formula)
+        missing = ltlf_atoms(parsed) - self.propositions.keys()
+        if missing:
+            raise ValueError(
+                f"formula references undefined propositions: {', '.join(sorted(missing))}"
+            )
+        if any(selector.correlate for selector in self.propositions.values()):
+            raise ValueError("LTLf proposition selectors cannot define correlate")
+        return self
+
+
 class AuraSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     version: Literal["0.1"]
-    policies: list[Policy] = Field(min_length=1)
+    policies: list[Policy] = Field(default_factory=list)
+    ltlf_policies: list[LTLfPolicy] = Field(default_factory=list)
     object_bindings: list[ObjectBinding] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def policy_ids_are_unique(self) -> AuraSpec:
-        ids = [policy.id for policy in self.policies]
+        ids = [policy.id for policy in [*self.policies, *self.ltlf_policies]]
+        if not ids:
+            raise ValueError("AuraSpec must define at least one policy or LTLf policy")
         if len(ids) != len(set(ids)):
             raise ValueError("policy IDs must be unique")
         return self

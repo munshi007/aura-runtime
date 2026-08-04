@@ -9,8 +9,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from aura_runtime.ltlf import LTLfMonitor, LTLfMonitorReport, PrefixVerdict
 from aura_runtime.models import AgentEvent, EventKind, Finding
-from aura_runtime.policy import AuraSpec, DataConstraint, Policy, value_at_path
+from aura_runtime.policy import AuraSpec, DataConstraint, LTLfPolicy, Policy, value_at_path
 
 
 class TemporalVerdict(StrEnum):
@@ -136,10 +137,13 @@ class RuntimeVerifier:
             self.spec,
             constraint_evaluator=self.constraint_evaluator,
         )
+        ltlf_monitor = OnlineLTLfMonitor(self.spec)
         findings: list[Finding] = []
         for event in events:
             findings.extend(monitor.observe(event))
+            findings.extend(ltlf_monitor.observe(event))
         findings.extend(monitor.finalize())
+        findings.extend(ltlf_monitor.finalize())
         return findings
 
     def verify_event(self, event: AgentEvent, history: list[AgentEvent]) -> list[Finding]:
@@ -326,4 +330,125 @@ class OnlineTemporalMonitor:
             event_id=conclusion_event.event_id,
             evidence_event_ids=evidence,
             engine="bounded-response-monitor",
+        )
+
+
+class LTLfPolicyState(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    policy_id: str
+    description: str
+    monitor: LTLfMonitorReport
+    finding_emitted: bool
+
+
+class LTLfRuntimeReport(BaseModel):
+    """Content-free formula states for one finite agent-run prefix."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    run_id: str | None
+    observed_event_count: int = Field(ge=0)
+    policies: list[LTLfPolicyState]
+    findings: list[Finding]
+    finalized: bool
+    content_included: Literal[False] = False
+
+
+class OnlineLTLfMonitor:
+    """Bind Aura event selectors to exact progression-based LTLf monitors."""
+
+    def __init__(self, spec: AuraSpec) -> None:
+        self.spec = spec
+        self._monitors = {
+            policy.id: LTLfMonitor(policy.formula) for policy in spec.ltlf_policies
+        }
+        self._history: list[AgentEvent] = []
+        self._findings: list[Finding] = []
+        self._emitted: set[str] = set()
+        self._finalized = False
+
+    def observe(self, event: AgentEvent) -> list[Finding]:
+        if self._finalized:
+            raise ValueError("cannot observe events after the LTLf monitor is finalized")
+        if self._history and event.run_id != self._history[0].run_id:
+            raise ValueError("monitor accepts events from exactly one run")
+        findings: list[Finding] = []
+        evidence = [item.event_id for item in [*self._history, event]]
+        for policy in self.spec.ltlf_policies:
+            monitor = self._monitors[policy.id]
+            true_propositions = {
+                name
+                for name in monitor.propositions
+                if policy.propositions[name].matches(event)
+            }
+            monitor.observe(true_propositions)
+            if (
+                monitor.report().prefix_verdict == PrefixVerdict.PERMANENTLY_VIOLATED
+                and policy.id not in self._emitted
+            ):
+                findings.append(self._violation(policy, event, evidence, final=False))
+                self._emitted.add(policy.id)
+        self._history.append(event)
+        self._findings.extend(findings)
+        if event.kind == EventKind.RUN_COMPLETED:
+            findings.extend(self.finalize(conclusion_event=event))
+        return findings
+
+    def finalize(self, *, conclusion_event: AgentEvent | None = None) -> list[Finding]:
+        if self._finalized:
+            return []
+        if not self._history:
+            self._finalized = True
+            return []
+        event = conclusion_event or self._history[-1]
+        evidence = [item.event_id for item in self._history]
+        findings: list[Finding] = []
+        for policy in self.spec.ltlf_policies:
+            report = self._monitors[policy.id].finalize()
+            if report.finite_trace_verdict == "fail" and policy.id not in self._emitted:
+                findings.append(self._violation(policy, event, evidence, final=True))
+                self._emitted.add(policy.id)
+        self._findings.extend(findings)
+        self._finalized = True
+        return findings
+
+    def report(self) -> LTLfRuntimeReport:
+        return LTLfRuntimeReport(
+            run_id=self._history[0].run_id if self._history else None,
+            observed_event_count=len(self._history),
+            policies=[
+                LTLfPolicyState(
+                    policy_id=policy.id,
+                    description=policy.description,
+                    monitor=self._monitors[policy.id].report(),
+                    finding_emitted=policy.id in self._emitted,
+                )
+                for policy in self.spec.ltlf_policies
+            ],
+            findings=self._findings,
+            finalized=self._finalized,
+        )
+
+    @staticmethod
+    def _violation(
+        policy: LTLfPolicy,
+        event: AgentEvent,
+        evidence_event_ids: list[UUID],
+        *,
+        final: bool,
+    ) -> Finding:
+        reason = (
+            "finite trace does not satisfy the formula"
+            if final
+            else "no future extension can satisfy the formula"
+        )
+        return Finding(
+            run_id=event.run_id,
+            policy_id=policy.id,
+            severity=policy.severity,
+            message=f"LTLf formula violated: {reason}",
+            event_id=event.event_id,
+            evidence_event_ids=list(dict.fromkeys(evidence_event_ids)),
+            engine="ltlf-progression-monitor-v0.1",
         )
