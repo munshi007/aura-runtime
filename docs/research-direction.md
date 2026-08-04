@@ -18,6 +18,7 @@ executions against executable behavioral contracts.
 6. **Partial-order causality** — preserve trace ancestry and object links so concurrent
    actions are not misrepresented as one arbitrary total order.
 
-The current alpha implements the evidence boundary, bounded temporal prerequisites, and
-SMT-backed concrete constraints. The other layers are explicit extension milestones,
-not claims of completed functionality.
+The current alpha implements the evidence boundary, bounded temporal prerequisites,
+SMT-backed concrete constraints, and a first partial-order causal graph for MCP requests,
+responses, and subscriptions. Richer object links and discovered concurrency relations
+remain explicit extension milestones, not claims of completed functionality.
