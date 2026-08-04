@@ -85,6 +85,17 @@ environment and operational settings, and can restore them with `aura disconnect
 See [zero-code Goose onboarding](docs/goose-onboarding.md) for the safety model and exact
 observability boundary.
 
+Reconstruct the MCP causal graph and check dual-era protocol invariants from captured wire
+evidence:
+
+```bash
+aura conformance <run-id> --db .aura/aura.db
+```
+
+The incremental monitor supports legacy initialization-based MCP and modern per-request
+metadata without collapsing concurrent messages into timestamp order. See
+[MCP causal conformance](docs/conformance.md).
+
 Replay reports separate introduced, resolved, and unchanged findings. Run diffs identify
 the common prefix and first divergent event while ignoring timestamps, generated IDs, and
 run IDs. Manifest diffs detect added, removed, and schema-changed tools.

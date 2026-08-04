@@ -11,6 +11,7 @@ from uuid import uuid4
 import typer
 
 from aura_runtime.adapters.otel import events_from_otlp_json
+from aura_runtime.conformance import analyze_protocol_records
 from aura_runtime.contract import TraceContract, check_contract
 from aura_runtime.flight import EnforcementMode, MCPFlightRecorder, verify_protocol_chain
 from aura_runtime.integrations.goose import (
@@ -184,6 +185,22 @@ def report(
         "findings": [finding.model_dump(mode="json") for finding in findings],
     }
     _emit_json(output)
+
+
+@app.command("conformance")
+def conformance_command(
+    run_id: Annotated[str, typer.Argument()],
+    db: DB_OPTION = Path(".aura/aura.db"),
+    output: Annotated[Path | None, typer.Option("--output")] = None,
+) -> None:
+    """Reconstruct MCP causality and check protocol lifecycle invariants."""
+    try:
+        report = analyze_protocol_records(SQLiteEventStore(db).protocol_records(run_id))
+    except ValueError as error:
+        raise _as_cli_error(error) from error
+    _emit_json(report.model_dump(mode="json"), output)
+    if report.verdict == "fail":
+        raise typer.Exit(code=2)
 
 
 @app.command("replay")
