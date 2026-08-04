@@ -22,6 +22,7 @@ from aura_runtime.verifier import (
     LTLfRuntimeReport,
     OnlineLTLfMonitor,
     OnlineTemporalMonitor,
+    ShieldActionReport,
     TemporalMonitorReport,
 )
 
@@ -38,6 +39,7 @@ class GatewayResult(BaseModel):
     action: GateAction
     findings: list[Finding] = Field(default_factory=list)
     response: dict[str, Any] | None = None
+    shield: ShieldActionReport | None = None
 
 
 def verify_protocol_chain(records: list[ProtocolRecord]) -> bool:
@@ -121,16 +123,31 @@ class MCPFlightRecorder:
 
         event = self.message_recorder.record("client_to_server", message)
         findings: list[Finding] = []
+        shield: ShieldActionReport | None = None
         if event is not None:
             expected_object_types = (
                 self.spec.expected_object_types(event) if self.spec is not None else []
             )
             if self.spec is not None:
                 event = self.spec.bind_objects(event)
+            if self.ltlf_monitor is not None:
+                shield = self.ltlf_monitor.preview(event)
+            reject_ltlf = (
+                self.mode == EnforcementMode.ENFORCE
+                and shield is not None
+                and not shield.safe
+            )
+            prospective = (
+                self.ltlf_monitor.prospective_findings(event, shield)
+                if reject_ltlf and self.ltlf_monitor is not None
+                else []
+            )
             findings = self._record_event(
                 event,
                 commit_object=False,
                 expected_object_types=expected_object_types,
+                observe_ltlf=not reject_ltlf,
+                additional_findings=prospective,
             )
 
         action = self._enforcement_action(findings)
@@ -141,9 +158,11 @@ class MCPFlightRecorder:
         self._append_protocol("client_to_server", message, forward, effective_action)
 
         if forward:
-            return GatewayResult(forward=True, action=effective_action, findings=findings)
+            return GatewayResult(
+                forward=True, action=effective_action, findings=findings, shield=shield
+            )
 
-        response = self._blocked_response(message, action, findings)
+        response = self._blocked_response(message, action, findings, shield)
         self._append_protocol("server_to_client", response, False, action)
         failed_event = self.message_recorder.record("server_to_client", response)
         if failed_event is not None:
@@ -156,6 +175,7 @@ class MCPFlightRecorder:
             action=action,
             findings=findings,
             response=response,
+            shield=shield,
         )
 
     def handle_server_message(self, message: dict[str, Any]) -> None:
@@ -196,10 +216,13 @@ class MCPFlightRecorder:
         *,
         commit_object: bool,
         expected_object_types: list[str] | None = None,
+        observe_ltlf: bool = True,
+        additional_findings: list[Finding] | None = None,
     ) -> list[Finding]:
         findings = self.monitor.observe(event) if self.monitor is not None else []
-        if self.ltlf_monitor is not None:
+        if self.ltlf_monitor is not None and observe_ltlf:
             findings.extend(self.ltlf_monitor.observe(event))
+        findings.extend(additional_findings or [])
         if self.object_monitor is not None:
             findings.extend(
                 self.object_monitor.observe(
@@ -254,7 +277,10 @@ class MCPFlightRecorder:
 
     @staticmethod
     def _blocked_response(
-        request: dict[str, Any], action: GateAction, findings: list[Finding]
+        request: dict[str, Any],
+        action: GateAction,
+        findings: list[Finding],
+        shield: ShieldActionReport | None = None,
     ) -> dict[str, Any]:
         approval = action == GateAction.REQUIRE_APPROVAL
         return {
@@ -266,6 +292,9 @@ class MCPFlightRecorder:
                 "data": {
                     "aura.action": action.value,
                     "aura.findings": [finding.model_dump(mode="json") for finding in findings],
+                    "aura.shield": (
+                        shield.model_dump(mode="json") if shield is not None else None
+                    ),
                 },
             },
         }

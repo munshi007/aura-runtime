@@ -215,7 +215,9 @@ aura proxy --policy aura.yaml --object-contract aura-object-contract.json \
 ```
 
 Blocked attempts remain in the evidence log but cannot advance the accepted lifecycle
-state. Object identifiers stay pseudonymous in reports.
+or LTLf state. Object identifiers stay pseudonymous in reports. Unsafe LTLf proposals
+include deterministic nearest-safe proposition valuations in the MCP error response; no
+LLM, model API, or API key participates in the verdict.
 
 Run validation:
 
@@ -247,6 +249,6 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the system boundary and
 
 ## Status
 
-`0.13.0a1` is a research-grade foundation. The next milestones are signed evidence
+`0.14.0a1` is a research-grade foundation. The next milestones are signed evidence
 bundles, symbolic proposition handling for larger formulas, and richer conformance beyond
 directly-follows structure.

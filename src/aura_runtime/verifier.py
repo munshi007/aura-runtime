@@ -9,7 +9,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from aura_runtime.ltlf import LTLfMonitor, LTLfMonitorReport, PrefixVerdict
+from aura_runtime.ltlf import LTLfMonitor, LTLfMonitorReport, LTLfShieldReport, PrefixVerdict
 from aura_runtime.models import AgentEvent, EventKind, Finding
 from aura_runtime.policy import AuraSpec, DataConstraint, LTLfPolicy, Policy, value_at_path
 
@@ -355,6 +355,27 @@ class LTLfRuntimeReport(BaseModel):
     content_included: Literal[False] = False
 
 
+class PolicyShieldDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    policy_id: str
+    description: str
+    effect: Literal["deny", "require_approval"]
+    assessment: LTLfShieldReport
+
+
+class ShieldActionReport(BaseModel):
+    """Deterministic assessment of a proposed canonical event."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    run_id: str
+    event_id: UUID
+    safe: bool
+    policies: list[PolicyShieldDecision]
+    content_included: Literal[False] = False
+
+
 class OnlineLTLfMonitor:
     """Bind Aura event selectors to exact progression-based LTLf monitors."""
 
@@ -367,6 +388,52 @@ class OnlineLTLfMonitor:
         self._findings: list[Finding] = []
         self._emitted: set[str] = set()
         self._finalized = False
+
+    def preview(self, event: AgentEvent) -> ShieldActionReport:
+        """Assess one event without changing accepted monitor state."""
+        if self._finalized:
+            raise ValueError("cannot preview events after the LTLf monitor is finalized")
+        if self._history and event.run_id != self._history[0].run_id:
+            raise ValueError("monitor accepts events from exactly one run")
+        policies = []
+        for policy in self.spec.ltlf_policies:
+            monitor = self._monitors[policy.id]
+            true_propositions = {
+                name
+                for name in monitor.propositions
+                if policy.propositions[name].matches(event)
+            }
+            policies.append(
+                PolicyShieldDecision(
+                    policy_id=policy.id,
+                    description=policy.description,
+                    effect=policy.effect,
+                    assessment=monitor.preview(true_propositions),
+                )
+            )
+        return ShieldActionReport(
+            run_id=event.run_id,
+            event_id=event.event_id,
+            safe=all(
+                item.assessment.classification != "permanently_violating"
+                for item in policies
+            ),
+            policies=policies,
+        )
+
+    def prospective_findings(
+        self, event: AgentEvent, report: ShieldActionReport | None = None
+    ) -> list[Finding]:
+        """Build findings for a rejected proposal without committing it."""
+        assessment = report or self.preview(event)
+        policies = {policy.id: policy for policy in self.spec.ltlf_policies}
+        evidence = [item.event_id for item in [*self._history, event]]
+        return [
+            self._violation(policies[item.policy_id], event, evidence, final=False)
+            for item in assessment.policies
+            if item.assessment.classification == "permanently_violating"
+            and item.policy_id not in self._emitted
+        ]
 
     def observe(self, event: AgentEvent) -> list[Finding]:
         if self._finalized:

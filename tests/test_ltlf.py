@@ -118,3 +118,25 @@ def test_monitor_cannot_finalize_an_empty_trace_or_resume_after_final() -> None:
     monitor.finalize()
     with pytest.raises(ValueError, match="finalized"):
         monitor.observe({"approved"})
+
+
+def test_preview_is_non_mutating_and_finds_nearest_safe_valuations() -> None:
+    monitor = LTLfMonitor("G !delete")
+
+    report = monitor.preview({"delete"})
+
+    assert report.classification == "permanently_violating"
+    assert report.resulting_verdict == "permanently_violated"
+    assert report.alternatives[0].true_propositions == []
+    assert report.alternatives[0].changed_propositions == ["delete"]
+    assert report.alternatives[0].distance == 1
+    assert monitor.observed_event_count == 0
+    assert str(monitor.residual) == "G(!delete)"
+
+
+def test_safe_preview_needs_no_repair() -> None:
+    report = LTLfMonitor("F approved").preview(set())
+
+    assert report.classification == "safe"
+    assert report.resulting_verdict == "currently_violated"
+    assert report.alternatives == []

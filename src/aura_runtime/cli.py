@@ -443,6 +443,27 @@ def ltlf_state_command(
         raise typer.Exit(code=2)
 
 
+@app.command("shield-action")
+def shield_action_command(
+    run_id: Annotated[str, typer.Argument()],
+    policy: Annotated[Path, typer.Option("--policy", exists=True, readable=True)],
+    event: Annotated[Path, typer.Option("--event", exists=True, readable=True)],
+    db: DB_OPTION = Path(".aura/aura.db"),
+) -> None:
+    """Preview one canonical event and return deterministic safe alternatives."""
+    events = SQLiteEventStore(db).events(run_id)
+    monitor = OnlineLTLfMonitor(AuraSpec.from_yaml(policy))
+    for captured in events:
+        monitor.observe(captured)
+    proposed = AgentEvent.model_validate_json(event.read_text(encoding="utf-8"))
+    if proposed.run_id != run_id:
+        raise typer.BadParameter("proposed event run_id must match the captured run")
+    report = monitor.preview(proposed)
+    _emit_json(report.model_dump(mode="json"))
+    if not report.safe:
+        raise typer.Exit(code=2)
+
+
 @app.command("replay")
 def replay_command(
     run_id: Annotated[str, typer.Argument()],

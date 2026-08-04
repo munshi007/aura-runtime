@@ -373,6 +373,35 @@ class PrefixVerdict(StrEnum):
     PERMANENTLY_VIOLATED = "permanently_violated"
 
 
+class ShieldClassification(StrEnum):
+    SAFE = "safe"
+    PERMANENTLY_VIOLATING = "permanently_violating"
+
+
+class ShieldAlternative(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    true_propositions: list[str]
+    false_propositions: list[str]
+    changed_propositions: list[str]
+    distance: int = Field(ge=1)
+    resulting_verdict: PrefixVerdict
+
+
+class LTLfShieldReport(BaseModel):
+    """Non-mutating safety assessment of one proposed valuation."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    proposed_true_propositions: list[str]
+    proposed_false_propositions: list[str]
+    classification: ShieldClassification
+    resulting_residual: str
+    resulting_verdict: PrefixVerdict
+    alternatives: list[ShieldAlternative]
+    content_included: Literal[False] = False
+
+
 class LTLfMonitorReport(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -417,6 +446,62 @@ class LTLfMonitor:
         self.residual = progress(self.residual, frozenset(true_propositions))
         self.observed_event_count += 1
 
+    def preview(
+        self,
+        true_propositions: set[str] | frozenset[str],
+        *,
+        max_alternatives: int = 8,
+    ) -> LTLfShieldReport:
+        """Assess a next valuation and nearest safe alternatives without mutation."""
+        if self.finalized:
+            raise ValueError("cannot preview events after the LTLf monitor is finalized")
+        proposed = frozenset(true_propositions)
+        unknown = proposed - set(self.propositions)
+        if unknown:
+            raise ValueError(f"unknown propositions: {', '.join(sorted(unknown))}")
+        successor = progress(self.residual, proposed)
+        verdict, _ = self._classify(successor)
+        violating = verdict == PrefixVerdict.PERMANENTLY_VIOLATED
+        alternatives: list[ShieldAlternative] = []
+        if violating:
+            candidates: list[tuple[int, tuple[str, ...], frozenset[str], PrefixVerdict]] = []
+            for bits in product((False, True), repeat=len(self.propositions)):
+                candidate = frozenset(
+                    name
+                    for name, enabled in zip(self.propositions, bits, strict=True)
+                    if enabled
+                )
+                if candidate == proposed:
+                    continue
+                candidate_verdict, _ = self._classify(progress(self.residual, candidate))
+                if candidate_verdict == PrefixVerdict.PERMANENTLY_VIOLATED:
+                    continue
+                changed = tuple(sorted(proposed ^ candidate))
+                candidates.append((len(changed), changed, candidate, candidate_verdict))
+            candidates.sort(key=lambda item: (item[0], item[1], tuple(sorted(item[2]))))
+            for distance, changed, candidate, candidate_verdict in candidates[:max_alternatives]:
+                alternatives.append(
+                    ShieldAlternative(
+                        true_propositions=sorted(candidate),
+                        false_propositions=sorted(set(self.propositions) - candidate),
+                        changed_propositions=list(changed),
+                        distance=distance,
+                        resulting_verdict=candidate_verdict,
+                    )
+                )
+        return LTLfShieldReport(
+            proposed_true_propositions=sorted(proposed),
+            proposed_false_propositions=sorted(set(self.propositions) - proposed),
+            classification=(
+                ShieldClassification.PERMANENTLY_VIOLATING
+                if violating
+                else ShieldClassification.SAFE
+            ),
+            resulting_residual=str(successor),
+            resulting_verdict=verdict,
+            alternatives=alternatives,
+        )
+
     def finalize(self) -> LTLfMonitorReport:
         if self.observed_event_count == 0:
             raise ValueError("cannot finalize an empty LTLf trace")
@@ -424,19 +509,7 @@ class LTLfMonitor:
         return self.report()
 
     def report(self) -> LTLfMonitorReport:
-        accepts, rejects, state_count = _extension_possibilities(
-            self.residual,
-            self.propositions,
-            self.max_states,
-        )
-        if accepts and not rejects:
-            verdict = PrefixVerdict.PERMANENTLY_SATISFIED
-        elif rejects and not accepts:
-            verdict = PrefixVerdict.PERMANENTLY_VIOLATED
-        elif accepts_empty(self.residual):
-            verdict = PrefixVerdict.CURRENTLY_SATISFIED
-        else:
-            verdict = PrefixVerdict.CURRENTLY_VIOLATED
+        verdict, state_count = self._classify(self.residual)
         finite_verdict: Literal["pass", "fail", "undetermined"] = "undetermined"
         if self.finalized:
             finite_verdict = "pass" if accepts_empty(self.residual) else "fail"
@@ -450,3 +523,17 @@ class LTLfMonitor:
             explored_state_count=state_count,
             finalized=self.finalized,
         )
+
+    def _classify(self, residual: Formula) -> tuple[PrefixVerdict, int]:
+        accepts, rejects, state_count = _extension_possibilities(
+            residual, self.propositions, self.max_states
+        )
+        if accepts and not rejects:
+            verdict = PrefixVerdict.PERMANENTLY_SATISFIED
+        elif rejects and not accepts:
+            verdict = PrefixVerdict.PERMANENTLY_VIOLATED
+        elif accepts_empty(residual):
+            verdict = PrefixVerdict.CURRENTLY_SATISFIED
+        else:
+            verdict = PrefixVerdict.CURRENTLY_VIOLATED
+        return verdict, state_count
