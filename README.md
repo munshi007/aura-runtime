@@ -139,6 +139,24 @@ or tool results. Set `AURA_DB_PATH` to select the store used by the
 `aura://runs/{run_id}/conformance` resource. See [MCP evidence API](docs/mcp-evidence-api.md)
 for the trust boundary and response shapes.
 
+AuraSpec can also express bounded future obligations. The online monitor distinguishes a
+still-possible `pending` prefix from a conclusive `satisfied` or `violated` obligation:
+
+```yaml
+on:
+  event: tool.call.requested
+  tool_matches: [delete_*]
+require_after:
+  event: human.approval
+  within_events: 3
+  where:
+    data.approved: true
+```
+
+Inspect a captured prefix with `aura temporal-state <run-id> --policy aura.yaml`; add
+`--final` only when the prefix should be interpreted as a complete finite trace. See
+[finite-trace temporal monitoring](docs/temporal-monitoring.md).
+
 Run validation:
 
 ```bash
@@ -169,5 +187,5 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the system boundary and
 
 ## Status
 
-`0.8.0a1` is a research-grade foundation. The next milestones are online LTLf monitors,
-object-centric process discovery, and OCEL 2.0 export.
+`0.9.0a1` is a research-grade foundation. The next milestones are general LTLf-to-automata
+compilation, object-centric process discovery, and OCEL 2.0 export.

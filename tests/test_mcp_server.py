@@ -103,8 +103,29 @@ policies:
                     "db_path": str(db_path),
                 },
             )
+            temporal = await client.call_tool(
+                "aura_temporal_state",
+                {
+                    "run_id": "replay-run",
+                    "policy_yaml": """
+version: "0.1"
+policies:
+  - id: transfer-completes
+    description: Transfer must complete
+    on:
+      event: tool.call.requested
+      tool_matches: [transfer_funds]
+    require_after:
+      event: tool.call.completed
+      within_events: 2
+""",
+                    "db_path": str(db_path),
+                },
+            )
         assert replay.structured_content["read_only"] is True
         assert replay.structured_content["replayed_finding_count"] == 1
+        assert temporal.structured_content["pending_obligation_count"] == 1
+        assert temporal.structured_content["content_included"] is False
 
     asyncio.run(call_status())
 
@@ -172,9 +193,20 @@ def test_mcp_evidence_tools_declare_read_only_annotations() -> None:
         evidence = {
             tool.name: tool
             for tool in result.tools
-            if tool.name in {"aura_status", "aura_conformance", "aura_explain_issue"}
+            if tool.name
+            in {
+                "aura_status",
+                "aura_conformance",
+                "aura_explain_issue",
+                "aura_temporal_state",
+            }
         }
-        assert set(evidence) == {"aura_status", "aura_conformance", "aura_explain_issue"}
+        assert set(evidence) == {
+            "aura_status",
+            "aura_conformance",
+            "aura_explain_issue",
+            "aura_temporal_state",
+        }
         assert all(tool.annotations.read_only_hint is True for tool in evidence.values())
         assert all(tool.annotations.open_world_hint is False for tool in evidence.values())
 

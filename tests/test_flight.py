@@ -24,6 +24,26 @@ def approval_spec() -> AuraSpec:
     )
 
 
+def completion_spec() -> AuraSpec:
+    return AuraSpec.model_validate(
+        {
+            "version": "0.1",
+            "policies": [
+                {
+                    "id": "tool-completes",
+                    "description": "A tool call must complete on the next observed event",
+                    "on": {"event": "tool.call.requested"},
+                    "require_after": {
+                        "event": "tool.call.completed",
+                        "within_events": 1,
+                        "correlate": {"parent_event_id": "event_id"},
+                    },
+                }
+            ],
+        }
+    )
+
+
 def call(tool: str = "delete_customer", request_id: int = 1) -> dict:
     return {
         "jsonrpc": "2.0",
@@ -89,6 +109,24 @@ def test_tool_manifest_is_snapshotted(tmp_path) -> None:
     assert len(snapshots) == 1
     assert snapshots[0].tools[0]["name"] == "search"
     assert len(snapshots[0].content_hash) == 64
+
+
+def test_flight_recorder_monitors_server_responses_online(tmp_path) -> None:
+    store = SQLiteEventStore(tmp_path / "aura.db")
+    recorder = MCPFlightRecorder(run_id="run-1", store=store, spec=completion_spec())
+
+    recorder.handle_client_message(call(tool="lookup"))
+    pending = recorder.temporal_report()
+    assert pending is not None
+    assert pending.pending_obligation_count == 1
+
+    recorder.handle_server_message({"jsonrpc": "2.0", "id": 1, "result": {"value": 42}})
+
+    report = recorder.temporal_report()
+    assert report is not None
+    assert report.pending_obligation_count == 0
+    assert report.satisfied_obligation_count == 1
+    assert store.findings("run-1") == []
 
 
 def test_hash_chain_detects_tampering(tmp_path) -> None:

@@ -23,6 +23,7 @@ from aura_runtime.flight import verify_protocol_chain
 from aura_runtime.policy import AuraSpec
 from aura_runtime.replay import compare_manifests, compare_runs, replay_run
 from aura_runtime.store import SQLiteEventStore
+from aura_runtime.verifier import OnlineTemporalMonitor, TemporalMonitorReport
 
 mcp = MCPServer("Aura Runtime")
 
@@ -199,6 +200,29 @@ def aura_explain_issue(
             if edge.source in selected and edge.target in selected
         ],
     )
+
+
+@mcp.tool(
+    title="Inspect Aura temporal state",
+    annotations=READ_ONLY,
+    structured_output=True,
+)
+def aura_temporal_state(
+    run_id: str,
+    policy_yaml: str,
+    db_path: str = ".aura/aura.db",
+    final: bool = False,
+) -> TemporalMonitorReport:
+    """Inspect three-valued bounded-response state without returning captured content."""
+    events = _store(db_path).events(run_id)
+    if not events:
+        raise ValueError(f"run {run_id!r} has no captured events")
+    monitor = OnlineTemporalMonitor(AuraSpec.from_yaml_text(policy_yaml))
+    for event in events:
+        monitor.observe(event)
+    if final:
+        monitor.finalize()
+    return monitor.report()
 
 
 @mcp.tool(annotations=READ_ONLY, structured_output=True)
