@@ -150,6 +150,9 @@ class LTLfPolicy(BaseModel):
     effect: Literal["deny", "require_approval"] = "deny"
     formula: str = Field(min_length=1)
     propositions: dict[str, EventSelector] = Field(min_length=1)
+    proposition_control: dict[
+        str, Literal["agent", "environment", "observed"]
+    ] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def formula_is_bound(self) -> LTLfPolicy:
@@ -161,7 +164,17 @@ class LTLfPolicy(BaseModel):
             )
         if any(selector.correlate for selector in self.propositions.values()):
             raise ValueError("LTLf proposition selectors cannot define correlate")
+        unknown_control = self.proposition_control.keys() - self.propositions.keys()
+        if unknown_control:
+            raise ValueError(
+                "proposition_control references undefined propositions: "
+                f"{', '.join(sorted(unknown_control))}"
+            )
         return self
+
+    def control_of(self, proposition: str) -> Literal["agent", "environment", "observed"]:
+        """Return explicit ownership, defaulting conservatively to observation-only."""
+        return self.proposition_control.get(proposition, "observed")
 
 
 class AuraSpec(BaseModel):

@@ -154,6 +154,8 @@ ltlf_policies:
       delete:
         event: tool.call.requested
         tool_matches: [delete_*]
+    proposition_control:
+      delete: agent
 """,
                     "proposed_event": {
                         "run_id": "replay-run",

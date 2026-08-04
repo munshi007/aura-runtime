@@ -173,6 +173,9 @@ ltlf_policies:
         event: human.approval
         where:
           data.approved: true
+    proposition_control:
+      delete: agent
+      approval: environment
 ```
 
 Aura supports Boolean operators plus strong/weak next (`X`, `Xw`), eventually (`F`),
@@ -249,6 +252,6 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the system boundary and
 
 ## Status
 
-`0.14.0a1` is a research-grade foundation. The next milestones are signed evidence
+`0.15.0a1` is a research-grade foundation. The next milestones are signed evidence
 bundles, symbolic proposition handling for larger formulas, and richer conformance beyond
 directly-follows structure.

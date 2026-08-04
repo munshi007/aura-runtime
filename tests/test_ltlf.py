@@ -140,3 +140,31 @@ def test_safe_preview_needs_no_repair() -> None:
     assert report.classification == "safe"
     assert report.resulting_verdict == "currently_violated"
     assert report.alternatives == []
+
+
+def test_preview_changes_only_controllable_propositions() -> None:
+    monitor = LTLfMonitor("(!delete) U approval")
+
+    report = monitor.preview(
+        {"delete"},
+        controllable_propositions={"delete"},
+        environment_propositions={"approval"},
+    )
+
+    assert report.classification == "permanently_violating"
+    assert report.alternatives[0].changed_propositions == ["delete"]
+    assert report.environment_requirements == [["approval"]]
+    assert all(
+        "approval" not in alternative.changed_propositions
+        for alternative in report.alternatives
+    )
+
+
+def test_uncontrollable_violation_is_reported_as_unenforceable() -> None:
+    report = LTLfMonitor("G safe").preview(
+        set(), environment_propositions={"safe"}, controllable_propositions=set()
+    )
+
+    assert report.classification == "permanently_violating"
+    assert report.enforceable is False
+    assert report.alternatives == []

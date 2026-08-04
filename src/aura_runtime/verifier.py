@@ -361,6 +361,10 @@ class PolicyShieldDecision(BaseModel):
     policy_id: str
     description: str
     effect: Literal["deny", "require_approval"]
+    intervention: Literal[
+        "allow", "suppress", "delay", "substitute", "request_approval", "no_safe_action"
+    ]
+    follow_up: Literal["request_approval", "wait_for_environment"] | None = None
     assessment: LTLfShieldReport
 
 
@@ -403,12 +407,66 @@ class OnlineLTLfMonitor:
                 for name in monitor.propositions
                 if policy.propositions[name].matches(event)
             }
+            assessment = monitor.preview(
+                true_propositions,
+                controllable_propositions={
+                    name
+                    for name in monitor.propositions
+                    if policy.control_of(name) == "agent"
+                },
+                environment_propositions={
+                    name
+                    for name in monitor.propositions
+                    if policy.control_of(name) == "environment"
+                },
+            )
+            environment_requirements = {
+                name
+                for requirement in assessment.environment_requirements
+                for name in requirement
+            }
+            approval_required = any(
+                policy.propositions[name].event == EventKind.HUMAN_APPROVAL
+                for name in environment_requirements
+            )
+            intervention: Literal[
+                "allow",
+                "suppress",
+                "delay",
+                "substitute",
+                "request_approval",
+                "no_safe_action",
+            ]
+            if assessment.classification != "permanently_violating":
+                intervention = "allow"
+            elif assessment.alternatives:
+                removed = any(
+                    set(item.changed_propositions) & true_propositions
+                    for item in assessment.alternatives
+                )
+                delayed = removed and any(
+                    item.resulting_verdict == "currently_violated"
+                    for item in assessment.alternatives
+                )
+                intervention = "delay" if delayed else "suppress" if removed else "substitute"
+            elif approval_required:
+                intervention = "request_approval"
+            else:
+                intervention = "no_safe_action"
             policies.append(
                 PolicyShieldDecision(
                     policy_id=policy.id,
                     description=policy.description,
                     effect=policy.effect,
-                    assessment=monitor.preview(true_propositions),
+                    intervention=intervention,
+                    follow_up=(
+                        "request_approval"
+                        if approval_required
+                        else "wait_for_environment"
+                        if environment_requirements
+                        else None
+                    ),
+                    assessment=assessment,
                 )
             )
         return ShieldActionReport(

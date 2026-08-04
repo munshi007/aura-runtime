@@ -26,6 +26,9 @@ graph for MCP requests, responses, and subscriptions. It also discovers content-
 object-type lifecycle and interaction profiles and checks exact structural drift between
 trusted and candidate cohorts. Trusted profiles can be compiled into content-addressed
 contracts that gate proposed MCP actions transactionally without trusting tool annotations.
+The anticipatory shield partitions propositions by control ownership, keeps environment
+facts fixed while calculating feasible repairs, and reports when no configured runtime
+action can enforce a monitorable formula.
 It does not yet claim LDLf, symbolic automata for high-dimensional proposition sets,
 object-centric Petri-net discovery, statistical drift thresholds, digital authorship
 signatures, or inferred concurrency. Those remain explicit extension milestones.

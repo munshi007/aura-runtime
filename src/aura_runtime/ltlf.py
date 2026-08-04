@@ -398,7 +398,10 @@ class LTLfShieldReport(BaseModel):
     classification: ShieldClassification
     resulting_residual: str
     resulting_verdict: PrefixVerdict
+    controllable_propositions: list[str]
     alternatives: list[ShieldAlternative]
+    environment_requirements: list[list[str]]
+    enforceable: bool
     content_included: Literal[False] = False
 
 
@@ -450,6 +453,8 @@ class LTLfMonitor:
         self,
         true_propositions: set[str] | frozenset[str],
         *,
+        controllable_propositions: set[str] | frozenset[str] | None = None,
+        environment_propositions: set[str] | frozenset[str] | None = None,
         max_alternatives: int = 8,
     ) -> LTLfShieldReport:
         """Assess a next valuation and nearest safe alternatives without mutation."""
@@ -459,6 +464,17 @@ class LTLfMonitor:
         unknown = proposed - set(self.propositions)
         if unknown:
             raise ValueError(f"unknown propositions: {', '.join(sorted(unknown))}")
+        controllable = frozenset(
+            self.propositions if controllable_propositions is None else controllable_propositions
+        )
+        environment = frozenset(environment_propositions or set())
+        unknown_control = (controllable | environment) - set(self.propositions)
+        if unknown_control:
+            raise ValueError(
+                f"unknown controlled propositions: {', '.join(sorted(unknown_control))}"
+            )
+        if controllable & environment:
+            raise ValueError("propositions cannot be both controllable and environment-owned")
         successor = progress(self.residual, proposed)
         verdict, _ = self._classify(successor)
         violating = verdict == PrefixVerdict.PERMANENTLY_VIOLATED
@@ -471,7 +487,8 @@ class LTLfMonitor:
                     for name, enabled in zip(self.propositions, bits, strict=True)
                     if enabled
                 )
-                if candidate == proposed:
+                changed_set = proposed ^ candidate
+                if candidate == proposed or not changed_set <= controllable:
                     continue
                 candidate_verdict, _ = self._classify(progress(self.residual, candidate))
                 if candidate_verdict == PrefixVerdict.PERMANENTLY_VIOLATED:
@@ -489,6 +506,28 @@ class LTLfMonitor:
                         resulting_verdict=candidate_verdict,
                     )
                 )
+        environment_requirements: list[list[str]] = []
+        if violating and environment:
+            requirements: list[tuple[int, tuple[str, ...]]] = []
+            for bits in product((False, True), repeat=len(self.propositions)):
+                candidate = frozenset(
+                    name
+                    for name, enabled in zip(self.propositions, bits, strict=True)
+                    if enabled
+                )
+                changed = proposed ^ candidate
+                changed_environment = changed & environment
+                if not changed_environment or changed - environment - controllable:
+                    continue
+                candidate_verdict, _ = self._classify(progress(self.residual, candidate))
+                if candidate_verdict != PrefixVerdict.PERMANENTLY_VIOLATED:
+                    requirements.append(
+                        (len(changed_environment), tuple(sorted(changed_environment)))
+                    )
+            environment_requirements = [
+                list(item)
+                for item in sorted({requirement for _, requirement in requirements})
+            ][:max_alternatives]
         return LTLfShieldReport(
             proposed_true_propositions=sorted(proposed),
             proposed_false_propositions=sorted(set(self.propositions) - proposed),
@@ -499,7 +538,10 @@ class LTLfMonitor:
             ),
             resulting_residual=str(successor),
             resulting_verdict=verdict,
+            controllable_propositions=sorted(controllable),
             alternatives=alternatives,
+            environment_requirements=environment_requirements,
+            enforceable=not violating or bool(alternatives),
         )
 
     def finalize(self) -> LTLfMonitorReport:
