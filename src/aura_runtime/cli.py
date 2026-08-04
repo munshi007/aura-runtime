@@ -13,6 +13,16 @@ import typer
 from aura_runtime.adapters.otel import events_from_otlp_json
 from aura_runtime.contract import TraceContract, check_contract
 from aura_runtime.flight import EnforcementMode, MCPFlightRecorder, verify_protocol_chain
+from aura_runtime.integrations.goose import (
+    connect_goose as connect_goose_config,
+)
+from aura_runtime.integrations.goose import (
+    disconnect_goose as disconnect_goose_config,
+)
+from aura_runtime.integrations.goose import (
+    doctor_goose as doctor_goose_config,
+)
+from aura_runtime.integrations.goose import goose_config_path
 from aura_runtime.models import AgentEvent
 from aura_runtime.policy import AuraSpec
 from aura_runtime.proxy import run_stdio_proxy
@@ -24,8 +34,14 @@ app = typer.Typer(help="Deterministic runtime verification for AI agents.", no_a
 contract_app = typer.Typer(
     help="Check agent behavior against trace contracts.", no_args_is_help=True
 )
+connect_app = typer.Typer(help="Enroll agent runtimes behind Aura.", no_args_is_help=True)
+disconnect_app = typer.Typer(help="Remove Aura runtime enrollment.", no_args_is_help=True)
+doctor_app = typer.Typer(help="Diagnose agent runtime enrollment.", no_args_is_help=True)
 manifests_app = typer.Typer(help="Compare captured MCP tool manifests.", no_args_is_help=True)
 app.add_typer(contract_app, name="contract")
+app.add_typer(connect_app, name="connect")
+app.add_typer(disconnect_app, name="disconnect")
+app.add_typer(doctor_app, name="doctor")
 app.add_typer(manifests_app, name="manifests")
 DB_OPTION = Annotated[Path, typer.Option("--db", help="Path to the Aura SQLite database.")]
 
@@ -40,6 +56,66 @@ def _emit_json(value: object, output: Path | None = None) -> None:
 
 def _as_cli_error(error: ValueError) -> typer.BadParameter:
     return typer.BadParameter(str(error))
+
+
+def _goose_path(config: Path | None) -> Path:
+    try:
+        return config or goose_config_path()
+    except ValueError as error:
+        raise _as_cli_error(error) from error
+
+
+@connect_app.command("goose")
+def connect_goose_command(
+    config: Annotated[Path | None, typer.Option("--config", help="Goose config.yaml path.")] = None,
+    policy: Annotated[
+        Path | None, typer.Option("--policy", exists=True, readable=True)
+    ] = None,
+    db: Annotated[Path | None, typer.Option("--db", help="Shared Aura evidence database.")] = None,
+    mode: Annotated[EnforcementMode, typer.Option("--mode")] = EnforcementMode.OBSERVE,
+    aura_command: Annotated[str, typer.Option("--aura-command")] = "aura",
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+) -> None:
+    """Reversibly wrap every configured Goose stdio extension with Aura."""
+    try:
+        report = connect_goose_config(
+            _goose_path(config),
+            policy=policy,
+            db=db,
+            mode=mode,
+            aura_command=aura_command,
+            dry_run=dry_run,
+        )
+    except ValueError as error:
+        raise _as_cli_error(error) from error
+    _emit_json(report.model_dump(mode="json"))
+
+
+@doctor_app.command("goose")
+def doctor_goose_command(
+    config: Annotated[Path | None, typer.Option("--config", help="Goose config.yaml path.")] = None,
+) -> None:
+    """Check configuration, wrapper integrity, and Aura executable availability."""
+    try:
+        report = doctor_goose_config(_goose_path(config))
+    except ValueError as error:
+        raise _as_cli_error(error) from error
+    _emit_json(report.model_dump(mode="json"))
+    if not report.healthy:
+        raise typer.Exit(code=2)
+
+
+@disconnect_app.command("goose")
+def disconnect_goose_command(
+    config: Annotated[Path | None, typer.Option("--config", help="Goose config.yaml path.")] = None,
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+) -> None:
+    """Restore enrolled Goose extensions without overwriting later edits."""
+    try:
+        report = disconnect_goose_config(_goose_path(config), dry_run=dry_run)
+    except ValueError as error:
+        raise _as_cli_error(error) from error
+    _emit_json(report.model_dump(mode="json"))
 
 
 @app.command("init")
