@@ -41,6 +41,7 @@ flowchart TD
 | `contract` | CI regression verdicts over committed baselines |
 | `mcp_server` | Agent-accessible status and finding tools |
 | `ocel_export` | Privacy-safe OCEL 2.0 object-centric exchange |
+| `object_process` | Object-centric lifecycle discovery and structural drift |
 | `cli` | Local ingestion, verification, and reports |
 
 ## Near-term design

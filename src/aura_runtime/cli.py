@@ -25,6 +25,7 @@ from aura_runtime.integrations.goose import (
 )
 from aura_runtime.integrations.goose import goose_config_path
 from aura_runtime.models import AgentEvent
+from aura_runtime.object_process import compare_object_behavior, discover_object_behavior
 from aura_runtime.ocel_export import events_to_ocel_json
 from aura_runtime.otlp_export import protocol_records_to_otlp_json
 from aura_runtime.policy import AuraSpec
@@ -41,11 +42,15 @@ connect_app = typer.Typer(help="Enroll agent runtimes behind Aura.", no_args_is_
 disconnect_app = typer.Typer(help="Remove Aura runtime enrollment.", no_args_is_help=True)
 doctor_app = typer.Typer(help="Diagnose agent runtime enrollment.", no_args_is_help=True)
 manifests_app = typer.Typer(help="Compare captured MCP tool manifests.", no_args_is_help=True)
+objects_app = typer.Typer(
+    help="Discover and compare object-centric behavior.", no_args_is_help=True
+)
 app.add_typer(contract_app, name="contract")
 app.add_typer(connect_app, name="connect")
 app.add_typer(disconnect_app, name="disconnect")
 app.add_typer(doctor_app, name="doctor")
 app.add_typer(manifests_app, name="manifests")
+app.add_typer(objects_app, name="objects")
 DB_OPTION = Annotated[Path, typer.Option("--db", help="Path to the Aura SQLite database.")]
 
 
@@ -223,6 +228,50 @@ def export_ocel(
     except ValueError as error:
         raise _as_cli_error(error) from error
     _emit_json(payload, output)
+
+
+def _selected_events(store: SQLiteEventStore, run_ids: list[str]) -> list[AgentEvent]:
+    return [event for run_id in dict.fromkeys(run_ids) for event in store.events(run_id)]
+
+
+@objects_app.command("discover")
+def discover_objects(
+    run_ids: Annotated[
+        list[str], typer.Option("--run", help="Run ID to include; repeat for a cohort.")
+    ],
+    db: DB_OPTION = Path(".aura/aura.db"),
+    output: Annotated[Path | None, typer.Option("--output")] = None,
+) -> None:
+    """Discover a content-free object-centric behavioral profile."""
+    try:
+        profile = discover_object_behavior(_selected_events(SQLiteEventStore(db), run_ids))
+    except ValueError as error:
+        raise _as_cli_error(error) from error
+    _emit_json(profile.model_dump(mode="json"), output)
+
+
+@objects_app.command("compare")
+def compare_objects(
+    baseline_runs: Annotated[
+        list[str], typer.Option("--baseline-run", help="Trusted run; repeat for a cohort.")
+    ],
+    candidate_runs: Annotated[
+        list[str], typer.Option("--candidate-run", help="Candidate run; repeat for a cohort.")
+    ],
+    db: DB_OPTION = Path(".aura/aura.db"),
+    output: Annotated[Path | None, typer.Option("--output")] = None,
+) -> None:
+    """Fail on structural object-lifecycle or interaction drift."""
+    store = SQLiteEventStore(db)
+    try:
+        baseline = discover_object_behavior(_selected_events(store, baseline_runs))
+        candidate = discover_object_behavior(_selected_events(store, candidate_runs))
+    except ValueError as error:
+        raise _as_cli_error(error) from error
+    report = compare_object_behavior(baseline, candidate)
+    _emit_json(report.model_dump(mode="json"), output)
+    if report.verdict == "fail":
+        raise typer.Exit(code=2)
 
 
 @app.command()

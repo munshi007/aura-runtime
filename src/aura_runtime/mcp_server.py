@@ -20,6 +20,12 @@ from aura_runtime.conformance import (
 )
 from aura_runtime.contract import TraceContract, check_contract
 from aura_runtime.flight import verify_protocol_chain
+from aura_runtime.object_process import (
+    ObjectBehaviorProfile,
+    ObjectConformanceReport,
+    compare_object_behavior,
+    discover_object_behavior,
+)
 from aura_runtime.policy import AuraSpec
 from aura_runtime.replay import compare_manifests, compare_runs, replay_run
 from aura_runtime.store import SQLiteEventStore
@@ -257,6 +263,45 @@ def aura_compare_runs(
     """Find the first behavioral divergence between two captured runs."""
     report = compare_runs(_store(db_path), left_run_id, right_run_id)
     return report.model_dump(mode="json")
+
+
+@mcp.tool(
+    title="Discover Aura object behavior",
+    annotations=READ_ONLY,
+    structured_output=True,
+)
+def aura_object_behavior(
+    run_ids: list[str],
+    db_path: str = ".aura/aura.db",
+) -> ObjectBehaviorProfile:
+    """Discover aggregate lifecycles and interactions without returning object IDs or content."""
+    store = _store(db_path)
+    events = [event for run_id in dict.fromkeys(run_ids) for event in store.events(run_id)]
+    return discover_object_behavior(events)
+
+
+@mcp.tool(
+    title="Compare Aura object behavior",
+    annotations=READ_ONLY,
+    structured_output=True,
+)
+def aura_object_conformance(
+    baseline_run_ids: list[str],
+    candidate_run_ids: list[str],
+    db_path: str = ".aura/aura.db",
+) -> ObjectConformanceReport:
+    """Report exact structural drift between trusted and candidate object behavior."""
+    store = _store(db_path)
+    baseline_events = [
+        event for run_id in dict.fromkeys(baseline_run_ids) for event in store.events(run_id)
+    ]
+    candidate_events = [
+        event for run_id in dict.fromkeys(candidate_run_ids) for event in store.events(run_id)
+    ]
+    return compare_object_behavior(
+        discover_object_behavior(baseline_events),
+        discover_object_behavior(candidate_events),
+    )
 
 
 @mcp.tool(annotations=READ_ONLY, structured_output=True)
