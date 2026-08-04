@@ -34,7 +34,12 @@ from aura_runtime.object_process import (
 from aura_runtime.policy import AuraSpec
 from aura_runtime.replay import compare_manifests, compare_runs, replay_run
 from aura_runtime.store import SQLiteEventStore
-from aura_runtime.verifier import OnlineTemporalMonitor, TemporalMonitorReport
+from aura_runtime.verifier import (
+    LTLfRuntimeReport,
+    OnlineLTLfMonitor,
+    OnlineTemporalMonitor,
+    TemporalMonitorReport,
+)
 
 mcp = MCPServer("Aura Runtime")
 
@@ -229,6 +234,29 @@ def aura_temporal_state(
     if not events:
         raise ValueError(f"run {run_id!r} has no captured events")
     monitor = OnlineTemporalMonitor(AuraSpec.from_yaml_text(policy_yaml))
+    for event in events:
+        monitor.observe(event)
+    if final:
+        monitor.finalize()
+    return monitor.report()
+
+
+@mcp.tool(
+    title="Inspect Aura LTLf state",
+    annotations=READ_ONLY,
+    structured_output=True,
+)
+def aura_ltlf_state(
+    run_id: str,
+    policy_yaml: str,
+    db_path: str = ".aura/aura.db",
+    final: bool = False,
+) -> LTLfRuntimeReport:
+    """Inspect exact four-valued LTLf state without returning captured content."""
+    events = _store(db_path).events(run_id)
+    if not events:
+        raise ValueError(f"run {run_id!r} has no captured events")
+    monitor = OnlineLTLfMonitor(AuraSpec.from_yaml_text(policy_yaml))
     for event in events:
         monitor.observe(event)
     if final:

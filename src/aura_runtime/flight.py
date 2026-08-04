@@ -18,7 +18,12 @@ from aura_runtime.models import (
 from aura_runtime.object_contract import ObjectContract, ObjectContractMonitor, ObjectMonitorReport
 from aura_runtime.policy import AuraSpec
 from aura_runtime.store import SQLiteEventStore
-from aura_runtime.verifier import OnlineTemporalMonitor, TemporalMonitorReport
+from aura_runtime.verifier import (
+    LTLfRuntimeReport,
+    OnlineLTLfMonitor,
+    OnlineTemporalMonitor,
+    TemporalMonitorReport,
+)
 
 
 class EnforcementMode(StrEnum):
@@ -75,9 +80,13 @@ class MCPFlightRecorder:
         self.message_recorder = MCPMessageRecorder(run_id, source="mcp-flight-recorder")
         self.history = store.events(run_id)
         self.monitor = OnlineTemporalMonitor(spec) if spec else None
+        self.ltlf_monitor = OnlineLTLfMonitor(spec) if spec else None
         if self.monitor is not None:
             for previous_event in self.history:
                 self.monitor.observe(previous_event)
+        if self.ltlf_monitor is not None:
+            for previous_event in self.history:
+                self.ltlf_monitor.observe(previous_event)
         existing_records = store.protocol_records(run_id)
         self.object_monitor = (
             ObjectContractMonitor(object_contract) if object_contract is not None else None
@@ -173,6 +182,10 @@ class MCPFlightRecorder:
         """Return the current content-free temporal monitor state, when configured."""
         return self.monitor.report() if self.monitor is not None else None
 
+    def ltlf_report(self) -> LTLfRuntimeReport | None:
+        """Return exact four-valued LTLf states, when configured."""
+        return self.ltlf_monitor.report() if self.ltlf_monitor is not None else None
+
     def object_report(self) -> ObjectMonitorReport | None:
         """Return content-free accepted object states and attempted violations."""
         return self.object_monitor.report() if self.object_monitor is not None else None
@@ -185,6 +198,8 @@ class MCPFlightRecorder:
         expected_object_types: list[str] | None = None,
     ) -> list[Finding]:
         findings = self.monitor.observe(event) if self.monitor is not None else []
+        if self.ltlf_monitor is not None:
+            findings.extend(self.ltlf_monitor.observe(event))
         if self.object_monitor is not None:
             findings.extend(
                 self.object_monitor.observe(
@@ -206,7 +221,7 @@ class MCPFlightRecorder:
         if self.spec is not None:
             effects.update(
                 policy.effect
-                for policy in self.spec.policies
+                for policy in [*self.spec.policies, *self.spec.ltlf_policies]
                 if policy.id in {finding.policy_id for finding in findings}
             )
         if self.object_monitor is not None and any(

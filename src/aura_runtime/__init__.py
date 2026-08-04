@@ -17,7 +17,13 @@ from aura_runtime.object_process import (
 from aura_runtime.policy import AuraSpec
 from aura_runtime.replay import compare_manifests, compare_runs, replay_run
 from aura_runtime.store import SQLiteEventStore
-from aura_runtime.verifier import OnlineTemporalMonitor, RuntimeVerifier, TemporalMonitorReport
+from aura_runtime.verifier import (
+    LTLfRuntimeReport,
+    OnlineLTLfMonitor,
+    OnlineTemporalMonitor,
+    RuntimeVerifier,
+    TemporalMonitorReport,
+)
 
 __all__ = [
     "AgentEvent",
@@ -28,6 +34,8 @@ __all__ = [
     "Finding",
     "GateAction",
     "MCPFlightRecorder",
+    "LTLfRuntimeReport",
+    "OnlineLTLfMonitor",
     "OnlineTemporalMonitor",
     "ObjectRef",
     "ObjectBehaviorProfile",
@@ -48,4 +56,4 @@ __all__ = [
     "discover_object_behavior",
 ]
 
-__version__ = "0.12.0a1"
+__version__ = "0.13.0a1"

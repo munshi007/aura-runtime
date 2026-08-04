@@ -33,7 +33,7 @@ from aura_runtime.policy import AuraSpec
 from aura_runtime.proxy import run_stdio_proxy
 from aura_runtime.replay import compare_manifests, compare_runs, replay_run
 from aura_runtime.store import SQLiteEventStore
-from aura_runtime.verifier import OnlineTemporalMonitor, RuntimeVerifier
+from aura_runtime.verifier import OnlineLTLfMonitor, OnlineTemporalMonitor, RuntimeVerifier
 
 app = typer.Typer(help="Deterministic runtime verification for AI agents.", no_args_is_help=True)
 contract_app = typer.Typer(
@@ -408,6 +408,31 @@ def temporal_state_command(
     if not events:
         raise typer.BadParameter(f"run {run_id!r} has no captured events")
     monitor = OnlineTemporalMonitor(AuraSpec.from_yaml(policy))
+    for event in events:
+        monitor.observe(event)
+    if final:
+        monitor.finalize()
+    report = monitor.report()
+    _emit_json(report.model_dump(mode="json"))
+    if report.findings:
+        raise typer.Exit(code=2)
+
+
+@app.command("ltlf-state")
+def ltlf_state_command(
+    run_id: Annotated[str, typer.Argument()],
+    policy: Annotated[Path, typer.Option("--policy", exists=True, readable=True)],
+    db: DB_OPTION = Path(".aura/aura.db"),
+    final: Annotated[
+        bool,
+        typer.Option("--final", help="Declare the captured prefix to be a complete trace."),
+    ] = False,
+) -> None:
+    """Inspect exact four-valued LTLf state for a captured run."""
+    events = SQLiteEventStore(db).events(run_id)
+    if not events:
+        raise typer.BadParameter(f"run {run_id!r} has no captured events")
+    monitor = OnlineLTLfMonitor(AuraSpec.from_yaml(policy))
     for event in events:
         monitor.observe(event)
     if final:
