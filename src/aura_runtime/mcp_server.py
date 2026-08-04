@@ -39,6 +39,7 @@ from aura_runtime.verifier import (
     LTLfRuntimeReport,
     OnlineLTLfMonitor,
     OnlineTemporalMonitor,
+    RuntimeStrategyReport,
     ShieldActionReport,
     TemporalMonitorReport,
 )
@@ -285,6 +286,27 @@ def aura_shield_action(
     if proposed.run_id != run_id:
         raise ValueError("proposed event run_id must match the captured run")
     return monitor.preview(proposed)
+
+
+@mcp.tool(
+    title="Check Aura LTLf strategy realizability",
+    annotations=READ_ONLY,
+    structured_output=True,
+)
+def aura_strategy_check(
+    policy_yaml: str,
+    run_id: str | None = None,
+    db_path: str = ".aura/aura.db",
+) -> RuntimeStrategyReport:
+    """Solve exact controller/environment games without executing an agent."""
+    monitor = OnlineLTLfMonitor(AuraSpec.from_yaml_text(policy_yaml))
+    if run_id is not None:
+        events = _store(db_path).events(run_id)
+        if not events:
+            raise ValueError(f"run {run_id!r} has no captured events")
+        for event in events:
+            monitor.observe(event)
+    return monitor.strategy_report()
 
 
 @mcp.tool(annotations=READ_ONLY, structured_output=True)

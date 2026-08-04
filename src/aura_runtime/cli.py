@@ -464,6 +464,26 @@ def shield_action_command(
         raise typer.Exit(code=2)
 
 
+@app.command("strategy-check")
+def strategy_check_command(
+    policy: Annotated[Path, typer.Option("--policy", exists=True, readable=True)],
+    run_id: Annotated[str | None, typer.Option("--run")] = None,
+    db: DB_OPTION = Path(".aura/aura.db"),
+) -> None:
+    """Check whether LTLf policies admit winning controller strategies."""
+    monitor = OnlineLTLfMonitor(AuraSpec.from_yaml(policy))
+    if run_id is not None:
+        events = SQLiteEventStore(db).events(run_id)
+        if not events:
+            raise typer.BadParameter(f"run {run_id!r} has no captured events")
+        for event in events:
+            monitor.observe(event)
+    report = monitor.strategy_report()
+    _emit_json(report.model_dump(mode="json"))
+    if not report.all_realizable:
+        raise typer.Exit(code=2)
+
+
 @app.command("replay")
 def replay_command(
     run_id: Annotated[str, typer.Argument()],

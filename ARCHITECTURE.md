@@ -74,6 +74,12 @@ repair alternatives; environment and observation-only propositions remain fixed.
 ownership is observation-only. This prevents a logical counterfactual, such as changing a
 human approval fact, from being presented as an executable agent action.
 
+Offline strategy checking expands reachable residual formulas into a two-player game.
+Accepting residuals form rank zero; the controller winning region is the least fixpoint of
+states with an agent valuation whose every environment successor has a lower winning rank.
+The solver is exact within explicit atom and state limits and never falls back to an
+approximate realizability verdict.
+
 ## Replay identity
 
 Replay does not compare regenerated finding IDs or timestamps. A finding's deterministic

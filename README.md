@@ -222,6 +222,18 @@ or LTLf state. Object identifiers stay pseudonymous in reports. Unsafe LTLf prop
 include deterministic nearest-safe proposition valuations in the MCP error response; no
 LLM, model API, or API key participates in the verdict.
 
+Check whether a policy is realizable against every environment behavior before deploying
+it:
+
+```bash
+aura strategy-check --policy aura.yaml
+aura strategy-check --policy aura.yaml --run captured-run
+```
+
+Aura constructs the reachable residual-formula game, computes the exact winning region,
+and returns either a controller strategy or an adversarial counterstrategy. See
+[finite-trace strategy synthesis](docs/strategy-synthesis.md).
+
 Run validation:
 
 ```bash
@@ -252,6 +264,6 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the system boundary and
 
 ## Status
 
-`0.15.0a1` is a research-grade foundation. The next milestones are signed evidence
+`0.16.0a1` is a research-grade foundation. The next milestones are signed evidence
 bundles, symbolic proposition handling for larger formulas, and richer conformance beyond
 directly-follows structure.

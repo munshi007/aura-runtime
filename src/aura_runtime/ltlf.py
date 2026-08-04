@@ -405,6 +405,56 @@ class LTLfShieldReport(BaseModel):
     content_included: Literal[False] = False
 
 
+class StrategyStatus(StrEnum):
+    REALIZABLE = "realizable"
+    COOPERATIVE_ONLY = "cooperative_only"
+    UNACHIEVABLE = "unachievable"
+
+
+class StrategyMove(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    residual: str
+    true_agent_propositions: list[str]
+    rank: int = Field(ge=1)
+
+
+class CounterMove(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    true_agent_propositions: list[str]
+    true_environment_propositions: list[str]
+    successor_residual: str
+
+
+class CounterStrategyState(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    residual: str
+    responses: list[CounterMove]
+
+
+class LTLfStrategyReport(BaseModel):
+    """Exact finite reachability-game solution for one residual formula."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    formula: str
+    initial_residual: str
+    status: StrategyStatus
+    turn_semantics: Literal["agent_then_environment"] = "agent_then_environment"
+    termination_control: Literal["agent"] = "agent"
+    agent_propositions: list[str]
+    environment_propositions: list[str]
+    reachable_state_count: int = Field(ge=1)
+    winning_state_count: int = Field(ge=0)
+    cooperative_state_count: int = Field(ge=0)
+    strategy: list[StrategyMove]
+    cooperative_strategy: list[StrategyMove]
+    counterstrategy: list[CounterStrategyState]
+    content_included: Literal[False] = False
+
+
 class LTLfMonitorReport(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -543,6 +593,198 @@ class LTLfMonitor:
             environment_requirements=environment_requirements,
             enforceable=not violating or bool(alternatives),
         )
+
+    def synthesize_strategy(
+        self,
+        controllable_propositions: set[str] | frozenset[str],
+        *,
+        max_states: int | None = None,
+    ) -> LTLfStrategyReport:
+        """Solve the exact finite reachability game from the current residual."""
+        controllable = frozenset(controllable_propositions)
+        unknown = controllable - set(self.propositions)
+        if unknown:
+            raise ValueError(f"unknown controllable propositions: {', '.join(sorted(unknown))}")
+        environment = frozenset(set(self.propositions) - controllable)
+        agent_values = tuple(
+            frozenset(
+                name
+                for name, enabled in zip(sorted(controllable), bits, strict=True)
+                if enabled
+            )
+            for bits in product((False, True), repeat=len(controllable))
+        )
+        environment_values = tuple(
+            frozenset(
+                name
+                for name, enabled in zip(sorted(environment), bits, strict=True)
+                if enabled
+            )
+            for bits in product((False, True), repeat=len(environment))
+        )
+        state_limit = max_states or self.max_states
+        queue = deque([self.residual])
+        states: set[Formula] = set()
+        transitions: dict[tuple[Formula, frozenset[str], frozenset[str]], Formula] = {}
+        while queue:
+            state = queue.popleft()
+            if state in states:
+                continue
+            states.add(state)
+            if len(states) > state_limit:
+                raise LTLfComplexityError(
+                    f"strategy game states exceed configured limit {state_limit}"
+                )
+            for agent_value in agent_values:
+                for environment_value in environment_values:
+                    successor = progress(state, agent_value | environment_value)
+                    transitions[(state, agent_value, environment_value)] = successor
+                    if successor not in states:
+                        queue.append(successor)
+
+        accepting = {state for state in states if accepts_empty(state)}
+        winning, winning_rank = self._solve_game_region(
+            states,
+            accepting,
+            agent_values,
+            environment_values,
+            transitions,
+            adversarial=True,
+        )
+        cooperative, cooperative_rank = self._solve_game_region(
+            states,
+            accepting,
+            agent_values,
+            environment_values,
+            transitions,
+            adversarial=False,
+        )
+        strategy = self._extract_strategy(
+            winning, winning_rank, agent_values, environment_values, transitions, True
+        )
+        cooperative_strategy = self._extract_strategy(
+            cooperative - winning,
+            cooperative_rank,
+            agent_values,
+            environment_values,
+            transitions,
+            False,
+        )
+        losing = states - winning
+        counterstrategy = []
+        for state in sorted(losing, key=str):
+            responses = []
+            for agent_value in agent_values:
+                blocking = next(
+                    environment_value
+                    for environment_value in environment_values
+                    if transitions[(state, agent_value, environment_value)] in losing
+                )
+                responses.append(
+                    CounterMove(
+                        true_agent_propositions=sorted(agent_value),
+                        true_environment_propositions=sorted(blocking),
+                        successor_residual=str(transitions[(state, agent_value, blocking)]),
+                    )
+                )
+            counterstrategy.append(CounterStrategyState(residual=str(state), responses=responses))
+        status = (
+            StrategyStatus.REALIZABLE
+            if self.residual in winning
+            else StrategyStatus.COOPERATIVE_ONLY
+            if self.residual in cooperative
+            else StrategyStatus.UNACHIEVABLE
+        )
+        return LTLfStrategyReport(
+            formula=str(self.formula),
+            initial_residual=str(self.residual),
+            status=status,
+            agent_propositions=sorted(controllable),
+            environment_propositions=sorted(environment),
+            reachable_state_count=len(states),
+            winning_state_count=len(winning),
+            cooperative_state_count=len(cooperative),
+            strategy=strategy,
+            cooperative_strategy=cooperative_strategy,
+            counterstrategy=counterstrategy,
+        )
+
+    @staticmethod
+    def _solve_game_region(
+        states: set[Formula],
+        accepting: set[Formula],
+        agent_values: tuple[frozenset[str], ...],
+        environment_values: tuple[frozenset[str], ...],
+        transitions: dict[tuple[Formula, frozenset[str], frozenset[str]], Formula],
+        *,
+        adversarial: bool,
+    ) -> tuple[set[Formula], dict[Formula, int]]:
+        region = set(accepting)
+        rank = {state: 0 for state in accepting}
+        depth = 0
+        while True:
+            depth += 1
+            added = set()
+            for state in states - region:
+                if any(
+                    (
+                        all(
+                            transitions[(state, agent_value, environment_value)] in region
+                            for environment_value in environment_values
+                        )
+                        if adversarial
+                        else any(
+                            transitions[(state, agent_value, environment_value)] in region
+                            for environment_value in environment_values
+                        )
+                    )
+                    for agent_value in agent_values
+                ):
+                    added.add(state)
+            if not added:
+                return region, rank
+            region.update(added)
+            rank.update({state: depth for state in added})
+
+    @staticmethod
+    def _extract_strategy(
+        region: set[Formula],
+        rank: dict[Formula, int],
+        agent_values: tuple[frozenset[str], ...],
+        environment_values: tuple[frozenset[str], ...],
+        transitions: dict[tuple[Formula, frozenset[str], frozenset[str]], Formula],
+        adversarial: bool,
+    ) -> list[StrategyMove]:
+        moves = []
+        for state in sorted(region, key=str):
+            if rank.get(state, 0) == 0:
+                continue
+            target_rank = rank[state] - 1
+            choice = next(
+                agent_value
+                for agent_value in agent_values
+                if (
+                    all(
+                        rank.get(transitions[(state, agent_value, environment_value)], 10**9)
+                        <= target_rank
+                        for environment_value in environment_values
+                    )
+                    if adversarial
+                    else any(
+                        rank.get(transitions[(state, agent_value, environment_value)], 10**9)
+                        <= target_rank
+                        for environment_value in environment_values
+                    )
+                )
+            )
+            moves.append(
+                StrategyMove(
+                    residual=str(state),
+                    true_agent_propositions=sorted(choice),
+                    rank=rank[state],
+                )
+            )
+        return moves
 
     def finalize(self) -> LTLfMonitorReport:
         if self.observed_event_count == 0:
