@@ -33,6 +33,10 @@ The strategy checker constructs the reachable progression automaton on demand an
 its finite reachability game by least fixpoint. It separates adversarial realizability from
 mere cooperative reachability and produces machine-readable controller or environment
 counterstrategies.
+Strategy and shielding now share a conservative event-alphabet theory, preventing the
+solver from winning through Boolean valuations that no single canonical event can produce.
+The feasibility predicate is an injected boundary intended for later symbolic-automata
+theories rather than a hard-coded dependency of the LTLf parser.
 It does not yet claim LDLf, symbolic automata for high-dimensional proposition sets,
 object-centric Petri-net discovery, statistical drift thresholds, digital authorship
 signatures, or inferred concurrency. Those remain explicit extension milestones.

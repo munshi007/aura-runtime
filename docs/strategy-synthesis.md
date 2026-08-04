@@ -11,6 +11,13 @@ Aura uses each canonical LTLf residual formula as a game state. Propositions mar
 an adversarial input. In each round the controller chooses its valuation and the environment
 chooses a response; their union progresses the formula once.
 
+The joint valuation must also be feasible for one canonical Aura event. Aura derives a
+conservative event alphabet from proposition selectors and rejects only proven conflicts:
+different event kinds, contradictory exact `where` values, disjoint exact tool-name sets,
+or identical selectors assigned different truth values. Wildcards and other undecidable
+relationships remain feasible. Reports expose total, feasible, and rejected valuation
+counts with content-free reason codes.
+
 Residuals that accept the empty suffix are final states because the controller may terminate
 the finite trace there. Aura computes the least winning fixpoint:
 

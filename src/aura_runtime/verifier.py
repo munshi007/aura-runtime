@@ -9,6 +9,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from aura_runtime.alphabet import EventAlphabet, EventAlphabetReport
 from aura_runtime.ltlf import (
     LTLfMonitor,
     LTLfMonitorReport,
@@ -391,6 +392,7 @@ class PolicyStrategyReport(BaseModel):
 
     policy_id: str
     description: str
+    alphabet: EventAlphabetReport
     strategy: LTLfStrategyReport
 
 
@@ -428,6 +430,7 @@ class OnlineLTLfMonitor:
         policies = []
         for policy in self.spec.ltlf_policies:
             monitor = self._monitors[policy.id]
+            alphabet = EventAlphabet(policy)
             true_propositions = {
                 name
                 for name in monitor.propositions
@@ -445,6 +448,7 @@ class OnlineLTLfMonitor:
                     for name in monitor.propositions
                     if policy.control_of(name) == "environment"
                 },
+                valuation_filter=alphabet.is_feasible,
             )
             environment_requirements = {
                 name
@@ -521,20 +525,25 @@ class OnlineLTLfMonitor:
 
     def strategy_report(self) -> RuntimeStrategyReport:
         """Solve controller/environment games from the current accepted prefix."""
-        policies = [
-            PolicyStrategyReport(
-                policy_id=policy.id,
-                description=policy.description,
-                strategy=self._monitors[policy.id].synthesize_strategy(
-                    {
-                        name
-                        for name in self._monitors[policy.id].propositions
-                        if policy.control_of(name) == "agent"
-                    }
-                ),
+        policies = []
+        for policy in self.spec.ltlf_policies:
+            monitor = self._monitors[policy.id]
+            alphabet = EventAlphabet(policy)
+            policies.append(
+                PolicyStrategyReport(
+                    policy_id=policy.id,
+                    description=policy.description,
+                    alphabet=alphabet.report(),
+                    strategy=monitor.synthesize_strategy(
+                        {
+                            name
+                            for name in monitor.propositions
+                            if policy.control_of(name) == "agent"
+                        },
+                        valuation_filter=alphabet.is_feasible,
+                    ),
+                )
             )
-            for policy in self.spec.ltlf_policies
-        ]
         return RuntimeStrategyReport(
             run_id=self._history[0].run_id if self._history else None,
             observed_event_count=len(self._history),

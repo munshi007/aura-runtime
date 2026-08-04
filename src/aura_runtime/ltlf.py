@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import lru_cache
@@ -449,6 +450,8 @@ class LTLfStrategyReport(BaseModel):
     reachable_state_count: int = Field(ge=1)
     winning_state_count: int = Field(ge=0)
     cooperative_state_count: int = Field(ge=0)
+    total_valuation_count: int = Field(ge=1)
+    feasible_valuation_count: int = Field(ge=1)
     strategy: list[StrategyMove]
     cooperative_strategy: list[StrategyMove]
     counterstrategy: list[CounterStrategyState]
@@ -505,6 +508,7 @@ class LTLfMonitor:
         *,
         controllable_propositions: set[str] | frozenset[str] | None = None,
         environment_propositions: set[str] | frozenset[str] | None = None,
+        valuation_filter: Callable[[frozenset[str]], bool] | None = None,
         max_alternatives: int = 8,
     ) -> LTLfShieldReport:
         """Assess a next valuation and nearest safe alternatives without mutation."""
@@ -538,7 +542,11 @@ class LTLfMonitor:
                     if enabled
                 )
                 changed_set = proposed ^ candidate
-                if candidate == proposed or not changed_set <= controllable:
+                if (
+                    candidate == proposed
+                    or not changed_set <= controllable
+                    or (valuation_filter is not None and not valuation_filter(candidate))
+                ):
                     continue
                 candidate_verdict, _ = self._classify(progress(self.residual, candidate))
                 if candidate_verdict == PrefixVerdict.PERMANENTLY_VIOLATED:
@@ -567,7 +575,11 @@ class LTLfMonitor:
                 )
                 changed = proposed ^ candidate
                 changed_environment = changed & environment
-                if not changed_environment or changed - environment - controllable:
+                if (
+                    not changed_environment
+                    or changed - environment - controllable
+                    or (valuation_filter is not None and not valuation_filter(candidate))
+                ):
                     continue
                 candidate_verdict, _ = self._classify(progress(self.residual, candidate))
                 if candidate_verdict != PrefixVerdict.PERMANENTLY_VIOLATED:
@@ -599,6 +611,7 @@ class LTLfMonitor:
         controllable_propositions: set[str] | frozenset[str],
         *,
         max_states: int | None = None,
+        valuation_filter: Callable[[frozenset[str]], bool] | None = None,
     ) -> LTLfStrategyReport:
         """Solve the exact finite reachability game from the current residual."""
         controllable = frozenset(controllable_propositions)
@@ -622,6 +635,18 @@ class LTLfMonitor:
             )
             for bits in product((False, True), repeat=len(environment))
         )
+        feasible_responses = {
+            agent_value: tuple(
+                environment_value
+                for environment_value in environment_values
+                if valuation_filter is None
+                or valuation_filter(agent_value | environment_value)
+            )
+            for agent_value in agent_values
+        }
+        available_agent_values = tuple(
+            agent_value for agent_value in agent_values if feasible_responses[agent_value]
+        )
         state_limit = max_states or self.max_states
         queue = deque([self.residual])
         states: set[Formula] = set()
@@ -635,8 +660,8 @@ class LTLfMonitor:
                 raise LTLfComplexityError(
                     f"strategy game states exceed configured limit {state_limit}"
                 )
-            for agent_value in agent_values:
-                for environment_value in environment_values:
+            for agent_value in available_agent_values:
+                for environment_value in feasible_responses[agent_value]:
                     successor = progress(state, agent_value | environment_value)
                     transitions[(state, agent_value, environment_value)] = successor
                     if successor not in states:
@@ -646,27 +671,27 @@ class LTLfMonitor:
         winning, winning_rank = self._solve_game_region(
             states,
             accepting,
-            agent_values,
-            environment_values,
+            available_agent_values,
+            feasible_responses,
             transitions,
             adversarial=True,
         )
         cooperative, cooperative_rank = self._solve_game_region(
             states,
             accepting,
-            agent_values,
-            environment_values,
+            available_agent_values,
+            feasible_responses,
             transitions,
             adversarial=False,
         )
         strategy = self._extract_strategy(
-            winning, winning_rank, agent_values, environment_values, transitions, True
+            winning, winning_rank, available_agent_values, feasible_responses, transitions, True
         )
         cooperative_strategy = self._extract_strategy(
             cooperative - winning,
             cooperative_rank,
-            agent_values,
-            environment_values,
+            available_agent_values,
+            feasible_responses,
             transitions,
             False,
         )
@@ -674,10 +699,10 @@ class LTLfMonitor:
         counterstrategy = []
         for state in sorted(losing, key=str):
             responses = []
-            for agent_value in agent_values:
+            for agent_value in available_agent_values:
                 blocking = next(
                     environment_value
-                    for environment_value in environment_values
+                    for environment_value in feasible_responses[agent_value]
                     if transitions[(state, agent_value, environment_value)] in losing
                 )
                 responses.append(
@@ -704,6 +729,10 @@ class LTLfMonitor:
             reachable_state_count=len(states),
             winning_state_count=len(winning),
             cooperative_state_count=len(cooperative),
+            total_valuation_count=2 ** len(self.propositions),
+            feasible_valuation_count=sum(
+                len(values) for values in feasible_responses.values()
+            ),
             strategy=strategy,
             cooperative_strategy=cooperative_strategy,
             counterstrategy=counterstrategy,
@@ -714,7 +743,7 @@ class LTLfMonitor:
         states: set[Formula],
         accepting: set[Formula],
         agent_values: tuple[frozenset[str], ...],
-        environment_values: tuple[frozenset[str], ...],
+        feasible_responses: dict[frozenset[str], tuple[frozenset[str], ...]],
         transitions: dict[tuple[Formula, frozenset[str], frozenset[str]], Formula],
         *,
         adversarial: bool,
@@ -730,12 +759,12 @@ class LTLfMonitor:
                     (
                         all(
                             transitions[(state, agent_value, environment_value)] in region
-                            for environment_value in environment_values
+                            for environment_value in feasible_responses[agent_value]
                         )
                         if adversarial
                         else any(
                             transitions[(state, agent_value, environment_value)] in region
-                            for environment_value in environment_values
+                            for environment_value in feasible_responses[agent_value]
                         )
                     )
                     for agent_value in agent_values
@@ -751,7 +780,7 @@ class LTLfMonitor:
         region: set[Formula],
         rank: dict[Formula, int],
         agent_values: tuple[frozenset[str], ...],
-        environment_values: tuple[frozenset[str], ...],
+        feasible_responses: dict[frozenset[str], tuple[frozenset[str], ...]],
         transitions: dict[tuple[Formula, frozenset[str], frozenset[str]], Formula],
         adversarial: bool,
     ) -> list[StrategyMove]:
@@ -767,13 +796,13 @@ class LTLfMonitor:
                     all(
                         rank.get(transitions[(state, agent_value, environment_value)], 10**9)
                         <= target_rank
-                        for environment_value in environment_values
+                        for environment_value in feasible_responses[agent_value]
                     )
                     if adversarial
                     else any(
                         rank.get(transitions[(state, agent_value, environment_value)], 10**9)
                         <= target_rank
-                        for environment_value in environment_values
+                        for environment_value in feasible_responses[agent_value]
                     )
                 )
             )
