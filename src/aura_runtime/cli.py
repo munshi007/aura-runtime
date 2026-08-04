@@ -25,6 +25,7 @@ from aura_runtime.integrations.goose import (
 )
 from aura_runtime.integrations.goose import goose_config_path
 from aura_runtime.models import AgentEvent
+from aura_runtime.otlp_export import protocol_records_to_otlp_json
 from aura_runtime.policy import AuraSpec
 from aura_runtime.proxy import run_stdio_proxy
 from aura_runtime.replay import compare_manifests, compare_runs, replay_run
@@ -165,6 +166,30 @@ def ingest_otlp(
     for event in events:
         store.append_event(event)
     typer.echo(f"Ingested {len(events)} OTLP spans")
+
+
+@app.command("export-otlp")
+def export_otlp(
+    run_id: Annotated[str, typer.Argument()],
+    db: DB_OPTION = Path(".aura/aura.db"),
+    output: Annotated[Path | None, typer.Option("--output")] = None,
+    include_content: Annotated[
+        bool,
+        typer.Option(
+            "--include-content",
+            help="Opt in to exporting tool arguments and results.",
+        ),
+    ] = False,
+) -> None:
+    """Export MCP causal evidence as an OTLP/HTTP JSON trace payload."""
+    try:
+        payload = protocol_records_to_otlp_json(
+            SQLiteEventStore(db).protocol_records(run_id),
+            include_content=include_content,
+        )
+    except ValueError as error:
+        raise _as_cli_error(error) from error
+    _emit_json(payload, output)
 
 
 @app.command()

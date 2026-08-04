@@ -28,7 +28,7 @@ def _kind(span: dict[str, Any], attrs: dict[str, Any]) -> EventKind:
     mcp_method = attrs.get("mcp.method.name")
     status = (span.get("status") or {}).get("code")
     if operation == "execute_tool" or mcp_method == "tools/call":
-        if status == "STATUS_CODE_ERROR":
+        if status in (2, "STATUS_CODE_ERROR"):
             return EventKind.TOOL_CALL_FAILED
         return EventKind.TOOL_CALL_COMPLETED
     if operation in {"chat", "generate_content", "text_completion"}:
