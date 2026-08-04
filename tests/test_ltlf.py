@@ -168,3 +168,39 @@ def test_uncontrollable_violation_is_reported_as_unenforceable() -> None:
     assert report.classification == "permanently_violating"
     assert report.enforceable is False
     assert report.alternatives == []
+
+
+def test_strategy_synthesis_finds_a_winning_controller() -> None:
+    report = LTLfMonitor("F done").synthesize_strategy({"done"})
+
+    assert report.status == "realizable"
+    assert report.turn_semantics == "agent_then_environment"
+    assert report.termination_control == "agent"
+    assert report.winning_state_count == report.reachable_state_count
+    initial = next(move for move in report.strategy if move.residual == "F(done)")
+    assert initial.true_agent_propositions == ["done"]
+    assert initial.rank == 1
+    assert report.counterstrategy == []
+
+
+def test_environment_goal_has_only_a_cooperative_strategy() -> None:
+    report = LTLfMonitor("F approved").synthesize_strategy(set())
+
+    assert report.status == "cooperative_only"
+    assert report.winning_state_count < report.cooperative_state_count
+    initial = next(item for item in report.counterstrategy if item.residual == "F(approved)")
+    assert initial.responses[0].true_environment_propositions == []
+    assert report.cooperative_strategy[0].rank == 1
+
+
+def test_impossible_formula_is_unachievable() -> None:
+    report = LTLfMonitor("false").synthesize_strategy(set())
+
+    assert report.status == "unachievable"
+    assert report.cooperative_state_count == 0
+    assert report.cooperative_strategy == []
+
+
+def test_strategy_synthesis_respects_state_bound() -> None:
+    with pytest.raises(LTLfComplexityError, match="strategy game states"):
+        LTLfMonitor("F (a & X b)").synthesize_strategy({"a", "b"}, max_states=1)

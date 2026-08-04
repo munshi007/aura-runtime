@@ -23,6 +23,7 @@ AURA_DB_PATH=.aura/aura.db uv run mcp run src/aura_runtime/mcp_server.py
 | `aura_temporal_state` | Inspect bounded-response obligations | Verdicts and evidence IDs only |
 | `aura_ltlf_state` | Inspect exact LTLf prefix or finalized state | Formula residuals, verdicts, and evidence IDs only |
 | `aura_shield_action` | Preview an event and enumerate nearest safe valuations | Proposition names and verdicts; no payloads |
+| `aura_strategy_check` | Solve controller/environment games for LTLf policies | Winning regions, strategies, and counterstrategies |
 | `aura_object_behavior` | Discover aggregate object lifecycles for run cohorts | Object types, activities, and counts; no object IDs |
 | `aura_object_conformance` | Compare trusted and candidate object behavior | Structural additions and removals only |
 | `aura_object_contract` | Validate a content-addressed object contract | Contract metadata and hash only |

@@ -9,7 +9,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from aura_runtime.ltlf import LTLfMonitor, LTLfMonitorReport, LTLfShieldReport, PrefixVerdict
+from aura_runtime.ltlf import (
+    LTLfMonitor,
+    LTLfMonitorReport,
+    LTLfShieldReport,
+    LTLfStrategyReport,
+    PrefixVerdict,
+)
 from aura_runtime.models import AgentEvent, EventKind, Finding
 from aura_runtime.policy import AuraSpec, DataConstraint, LTLfPolicy, Policy, value_at_path
 
@@ -380,6 +386,26 @@ class ShieldActionReport(BaseModel):
     content_included: Literal[False] = False
 
 
+class PolicyStrategyReport(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    policy_id: str
+    description: str
+    strategy: LTLfStrategyReport
+
+
+class RuntimeStrategyReport(BaseModel):
+    """Game solutions for all LTLf policies at one accepted run prefix."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    run_id: str | None
+    observed_event_count: int = Field(ge=0)
+    policies: list[PolicyStrategyReport]
+    all_realizable: bool
+    content_included: Literal[False] = False
+
+
 class OnlineLTLfMonitor:
     """Bind Aura event selectors to exact progression-based LTLf monitors."""
 
@@ -492,6 +518,31 @@ class OnlineLTLfMonitor:
             if item.assessment.classification == "permanently_violating"
             and item.policy_id not in self._emitted
         ]
+
+    def strategy_report(self) -> RuntimeStrategyReport:
+        """Solve controller/environment games from the current accepted prefix."""
+        policies = [
+            PolicyStrategyReport(
+                policy_id=policy.id,
+                description=policy.description,
+                strategy=self._monitors[policy.id].synthesize_strategy(
+                    {
+                        name
+                        for name in self._monitors[policy.id].propositions
+                        if policy.control_of(name) == "agent"
+                    }
+                ),
+            )
+            for policy in self.spec.ltlf_policies
+        ]
+        return RuntimeStrategyReport(
+            run_id=self._history[0].run_id if self._history else None,
+            observed_event_count=len(self._history),
+            policies=policies,
+            all_realizable=all(
+                item.strategy.status == "realizable" for item in policies
+            ),
+        )
 
     def observe(self, event: AgentEvent) -> list[Finding]:
         if self._finalized:

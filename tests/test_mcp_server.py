@@ -165,6 +165,23 @@ ltlf_policies:
                     "db_path": str(db_path),
                 },
             )
+            strategy = await client.call_tool(
+                "aura_strategy_check",
+                {
+                    "policy_yaml": """
+version: "0.1"
+ltlf_policies:
+  - id: completion
+    description: Agent eventually completes
+    formula: F done
+    propositions:
+      done:
+        event: run.completed
+    proposition_control:
+      done: agent
+""",
+                },
+            )
         assert replay.structured_content["read_only"] is True
         assert replay.structured_content["replayed_finding_count"] == 1
         assert temporal.structured_content["pending_obligation_count"] == 1
@@ -177,6 +194,7 @@ ltlf_policies:
         assert shield.structured_content["policies"][0]["assessment"]["alternatives"][0][
             "changed_propositions"
         ] == ["delete"]
+        assert strategy.structured_content["all_realizable"] is True
 
     asyncio.run(call_status())
 
@@ -252,6 +270,7 @@ def test_mcp_evidence_tools_declare_read_only_annotations() -> None:
                 "aura_temporal_state",
                 "aura_ltlf_state",
                 "aura_shield_action",
+                "aura_strategy_check",
                 "aura_object_contract",
                 "aura_object_state",
             }
@@ -263,6 +282,7 @@ def test_mcp_evidence_tools_declare_read_only_annotations() -> None:
             "aura_temporal_state",
             "aura_ltlf_state",
             "aura_shield_action",
+            "aura_strategy_check",
             "aura_object_contract",
             "aura_object_state",
         }

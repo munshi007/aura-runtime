@@ -167,6 +167,16 @@ def test_repair_delays_action_while_waiting_for_environment_approval() -> None:
     assert decision.assessment.alternatives[0].changed_propositions == ["delete"]
 
 
+def test_runtime_strategy_report_distinguishes_guarantee_from_cooperation() -> None:
+    agent = OnlineLTLfMonitor(spec("F delete")).strategy_report()
+    environment = OnlineLTLfMonitor(spec("F approval")).strategy_report()
+
+    assert agent.all_realizable is True
+    assert agent.policies[0].strategy.status == "realizable"
+    assert environment.all_realizable is False
+    assert environment.policies[0].strategy.status == "cooperative_only"
+
+
 def test_ltlf_state_cli_reports_prefix_and_final_verdict(tmp_path) -> None:
     db_path = tmp_path / "aura.db"
     SQLiteEventStore(db_path).append_event(event(EventKind.RUN_STARTED, 0))
@@ -252,3 +262,28 @@ ltlf_policies:
     assert report["policies"][0]["assessment"]["alternatives"][0][
         "changed_propositions"
     ] == ["delete"]
+
+
+def test_strategy_check_cli_fails_for_an_environment_only_goal(tmp_path) -> None:
+    policy_path = tmp_path / "aura.yaml"
+    policy_path.write_text(
+        """version: "0.1"
+ltlf_policies:
+  - id: approval-goal
+    description: Approval eventually occurs
+    formula: F approval
+    propositions:
+      approval:
+        event: human.approval
+    proposition_control:
+      approval: environment
+""",
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(app, ["strategy-check", "--policy", str(policy_path)])
+
+    assert result.exit_code == 2
+    report = json.loads(result.stdout)
+    assert report["all_realizable"] is False
+    assert report["policies"][0]["strategy"]["status"] == "cooperative_only"

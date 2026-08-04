@@ -29,6 +29,10 @@ contracts that gate proposed MCP actions transactionally without trusting tool a
 The anticipatory shield partitions propositions by control ownership, keeps environment
 facts fixed while calculating feasible repairs, and reports when no configured runtime
 action can enforce a monitorable formula.
+The strategy checker constructs the reachable progression automaton on demand and solves
+its finite reachability game by least fixpoint. It separates adversarial realizability from
+mere cooperative reachability and produces machine-readable controller or environment
+counterstrategies.
 It does not yet claim LDLf, symbolic automata for high-dimensional proposition sets,
 object-centric Petri-net discovery, statistical drift thresholds, digital authorship
 signatures, or inferred concurrency. Those remain explicit extension milestones.
