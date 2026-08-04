@@ -21,6 +21,8 @@ executions against executable behavioral contracts.
 The current alpha implements the evidence boundary, qualified event-to-object links,
 privacy-safe OCEL 2.0 exchange, bounded temporal prerequisites, three-valued bounded
 future-response monitors, SMT-backed concrete constraints, and a first partial-order causal
-graph for MCP requests, responses, and subscriptions. It does not yet claim arbitrary LTLf
-parsing, object-centric process discovery, or inferred concurrency. Those remain explicit
-extension milestones.
+graph for MCP requests, responses, and subscriptions. It also discovers content-free
+object-type lifecycle and interaction profiles and checks exact structural drift between
+trusted and candidate cohorts. It does not yet claim arbitrary LTLf parsing, object-centric
+Petri-net discovery, statistical drift thresholds, or inferred concurrency. Those remain
+explicit extension milestones.

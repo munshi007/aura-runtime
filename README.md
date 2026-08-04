@@ -168,6 +168,19 @@ aura export-ocel --db .aura/aura.db --run run-1 --run run-2 \
 
 See [OCEL 2.0 export](docs/ocel-export.md) for object annotation and privacy semantics.
 
+Discover aggregate object lifecycles and fail CI on structural drift without exporting raw
+object identifiers or event content:
+
+```bash
+aura objects discover --run trusted-1 --run trusted-2 --output baseline.json
+aura objects compare --baseline-run trusted-1 --candidate-run candidate-1 \
+  --output object-drift.json
+```
+
+The MCP tools `aura_object_behavior` and `aura_object_conformance` expose the same read-only,
+content-free analysis to agents and IDEs. See
+[object-centric behavior discovery](docs/object-centric-discovery.md).
+
 Run validation:
 
 ```bash
@@ -198,5 +211,5 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the system boundary and
 
 ## Status
 
-`0.10.0a1` is a research-grade foundation. The next milestones are general LTLf-to-automata
-compilation and object-centric process discovery over exported evidence.
+`0.11.0a1` is a research-grade foundation. The next milestones are general LTLf-to-automata
+compilation and richer object-centric conformance beyond directly-follows structure.
