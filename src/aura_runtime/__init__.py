@@ -3,6 +3,11 @@
 from aura_runtime.contract import ContractReport, TraceContract, check_contract
 from aura_runtime.flight import EnforcementMode, MCPFlightRecorder
 from aura_runtime.models import AgentEvent, EventKind, Finding, GateAction, ObjectRef, Severity
+from aura_runtime.object_contract import (
+    ObjectContract,
+    ObjectContractMonitor,
+    ObjectMonitorReport,
+)
 from aura_runtime.object_process import (
     ObjectBehaviorProfile,
     ObjectConformanceReport,
@@ -26,7 +31,10 @@ __all__ = [
     "OnlineTemporalMonitor",
     "ObjectRef",
     "ObjectBehaviorProfile",
+    "ObjectContract",
+    "ObjectContractMonitor",
     "ObjectConformanceReport",
+    "ObjectMonitorReport",
     "RuntimeVerifier",
     "SQLiteEventStore",
     "Severity",
@@ -40,4 +48,4 @@ __all__ = [
     "discover_object_behavior",
 ]
 
-__version__ = "0.11.0a1"
+__version__ = "0.12.0a1"

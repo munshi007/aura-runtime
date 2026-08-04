@@ -23,6 +23,8 @@ privacy-safe OCEL 2.0 exchange, bounded temporal prerequisites, three-valued bou
 future-response monitors, SMT-backed concrete constraints, and a first partial-order causal
 graph for MCP requests, responses, and subscriptions. It also discovers content-free
 object-type lifecycle and interaction profiles and checks exact structural drift between
-trusted and candidate cohorts. It does not yet claim arbitrary LTLf parsing, object-centric
-Petri-net discovery, statistical drift thresholds, or inferred concurrency. Those remain
+trusted and candidate cohorts. Trusted profiles can be compiled into content-addressed
+contracts that gate proposed MCP actions transactionally without trusting tool annotations.
+It does not yet claim arbitrary LTLf parsing, object-centric Petri-net discovery, statistical
+drift thresholds, digital authorship signatures, or inferred concurrency. Those remain
 explicit extension milestones.

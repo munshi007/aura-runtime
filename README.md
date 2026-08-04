@@ -133,9 +133,9 @@ Run the MCP server with the official MCP SDK CLI:
 uv run mcp run src/aura_runtime/mcp_server.py
 ```
 
-An agent or IDE can then call `aura_status`, `aura_conformance`, and
-`aura_explain_issue` to inspect stored evidence without receiving prompts, tool arguments,
-or tool results. Set `AURA_DB_PATH` to select the store used by the
+An agent or IDE can then call the `aura_*` inspection tools to inspect protocol,
+temporal, and object-centric evidence without receiving prompts, tool arguments, or tool
+results. Set `AURA_DB_PATH` to select the store used by the
 `aura://runs/{run_id}/conformance` resource. See [MCP evidence API](docs/mcp-evidence-api.md)
 for the trust boundary and response shapes.
 
@@ -181,6 +181,19 @@ The MCP tools `aura_object_behavior` and `aura_object_conformance` expose the sa
 content-free analysis to agents and IDEs. See
 [object-centric behavior discovery](docs/object-centric-discovery.md).
 
+Compile representative behavior into a content-addressed contract and enforce it before
+MCP tool calls reach the upstream server:
+
+```bash
+aura objects contract create --baseline-run trusted-1 \
+  --output aura-object-contract.json
+aura proxy --policy aura.yaml --object-contract aura-object-contract.json \
+  --mode enforce -- your-mcp-server
+```
+
+Blocked attempts remain in the evidence log but cannot advance the accepted lifecycle
+state. Object identifiers stay pseudonymous in reports.
+
 Run validation:
 
 ```bash
@@ -211,5 +224,6 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the system boundary and
 
 ## Status
 
-`0.11.0a1` is a research-grade foundation. The next milestones are general LTLf-to-automata
-compilation and richer object-centric conformance beyond directly-follows structure.
+`0.12.0a1` is a research-grade foundation. The next milestones are general LTLf-to-automata
+compilation, signed evidence bundles, and richer conformance beyond directly-follows
+structure.

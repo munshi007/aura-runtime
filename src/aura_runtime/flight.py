@@ -15,6 +15,7 @@ from aura_runtime.models import (
     ProtocolRecord,
     ToolManifestSnapshot,
 )
+from aura_runtime.object_contract import ObjectContract, ObjectContractMonitor, ObjectMonitorReport
 from aura_runtime.policy import AuraSpec
 from aura_runtime.store import SQLiteEventStore
 from aura_runtime.verifier import OnlineTemporalMonitor, TemporalMonitorReport
@@ -63,12 +64,14 @@ class MCPFlightRecorder:
         run_id: str,
         store: SQLiteEventStore,
         spec: AuraSpec | None = None,
+        object_contract: ObjectContract | None = None,
         mode: EnforcementMode = EnforcementMode.OBSERVE,
     ) -> None:
         self.run_id = run_id
         self.store = store
         self.mode = mode
         self.spec = spec
+        self.object_contract = object_contract
         self.message_recorder = MCPMessageRecorder(run_id, source="mcp-flight-recorder")
         self.history = store.events(run_id)
         self.monitor = OnlineTemporalMonitor(spec) if spec else None
@@ -76,6 +79,27 @@ class MCPFlightRecorder:
             for previous_event in self.history:
                 self.monitor.observe(previous_event)
         existing_records = store.protocol_records(run_id)
+        self.object_monitor = (
+            ObjectContractMonitor(object_contract) if object_contract is not None else None
+        )
+        if self.object_monitor is not None:
+            forwarded_requests = {
+                str(record.message.get("id", ""))
+                for record in existing_records
+                if record.direction == "client_to_server"
+                and record.forwarded
+                and record.message.get("method") == "tools/call"
+            }
+            for previous_event in self.history:
+                if not previous_event.objects:
+                    continue
+                request_id = str(previous_event.data.get("mcp.request_id", ""))
+                if (
+                    previous_event.kind.value == "tool.call.requested"
+                    and request_id not in forwarded_requests
+                ):
+                    continue
+                self.object_monitor.commit(previous_event)
         self._protocol_sequence = len(existing_records)
         self._previous_hash = existing_records[-1].content_hash if existing_records else ""
         self._pending_methods: dict[str, str] = {}
@@ -89,10 +113,21 @@ class MCPFlightRecorder:
         event = self.message_recorder.record("client_to_server", message)
         findings: list[Finding] = []
         if event is not None:
-            findings = self._record_event(event)
+            expected_object_types = (
+                self.spec.expected_object_types(event) if self.spec is not None else []
+            )
+            if self.spec is not None:
+                event = self.spec.bind_objects(event)
+            findings = self._record_event(
+                event,
+                commit_object=False,
+                expected_object_types=expected_object_types,
+            )
 
         action = self._enforcement_action(findings)
         forward = self.mode == EnforcementMode.OBSERVE or action == GateAction.ALLOW
+        if forward and event is not None and event.objects and self.object_monitor is not None:
+            self.object_monitor.commit(event)
         effective_action = GateAction.ALLOW if forward else action
         self._append_protocol("client_to_server", message, forward, effective_action)
 
@@ -103,7 +138,9 @@ class MCPFlightRecorder:
         self._append_protocol("server_to_client", response, False, action)
         failed_event = self.message_recorder.record("server_to_client", response)
         if failed_event is not None:
-            self._record_event(failed_event)
+            if self.spec is not None:
+                failed_event = self.spec.bind_objects(failed_event)
+            self._record_event(failed_event, commit_object=False)
         self._pending_methods.pop(request_id, None)
         return GatewayResult(
             forward=False,
@@ -116,7 +153,9 @@ class MCPFlightRecorder:
         self._append_protocol("server_to_client", message, True, GateAction.ALLOW)
         event = self.message_recorder.record("server_to_client", message)
         if event is not None:
-            self._record_event(event)
+            if self.spec is not None:
+                event = self.spec.bind_objects(event)
+            self._record_event(event, commit_object=True)
 
         request_id = str(message.get("id", ""))
         method = self._pending_methods.pop(request_id, None)
@@ -134,10 +173,26 @@ class MCPFlightRecorder:
         """Return the current content-free temporal monitor state, when configured."""
         return self.monitor.report() if self.monitor is not None else None
 
-    def _record_event(self, event: AgentEvent) -> list[Finding]:
-        if self.spec is not None:
-            event = self.spec.bind_objects(event)
+    def object_report(self) -> ObjectMonitorReport | None:
+        """Return content-free accepted object states and attempted violations."""
+        return self.object_monitor.report() if self.object_monitor is not None else None
+
+    def _record_event(
+        self,
+        event: AgentEvent,
+        *,
+        commit_object: bool,
+        expected_object_types: list[str] | None = None,
+    ) -> list[Finding]:
         findings = self.monitor.observe(event) if self.monitor is not None else []
+        if self.object_monitor is not None:
+            findings.extend(
+                self.object_monitor.observe(
+                    event,
+                    commit=commit_object,
+                    expected_object_types=expected_object_types,
+                )
+            )
         self.store.append_event(event)
         self.history.append(event)
         for finding in findings:
@@ -145,14 +200,20 @@ class MCPFlightRecorder:
         return findings
 
     def _enforcement_action(self, findings: list[Finding]) -> GateAction:
-        if not findings or self.spec is None:
+        if not findings:
             return GateAction.ALLOW
-        effects = {
-            policy.id: policy.effect
-            for policy in self.spec.policies
-            if policy.id in {finding.policy_id for finding in findings}
-        }
-        if "deny" in effects.values():
+        effects = set()
+        if self.spec is not None:
+            effects.update(
+                policy.effect
+                for policy in self.spec.policies
+                if policy.id in {finding.policy_id for finding in findings}
+            )
+        if self.object_monitor is not None and any(
+            finding.engine == "object-contract-v0.1" for finding in findings
+        ):
+            effects.add(self.object_contract.effect)
+        if "deny" in effects:
             return GateAction.DENY
         return GateAction.REQUIRE_APPROVAL
 
