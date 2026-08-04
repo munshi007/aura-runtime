@@ -133,6 +133,12 @@ Run the MCP server with the official MCP SDK CLI:
 uv run mcp run src/aura_runtime/mcp_server.py
 ```
 
+An agent or IDE can then call `aura_status`, `aura_conformance`, and
+`aura_explain_issue` to inspect stored evidence without receiving prompts, tool arguments,
+or tool results. Set `AURA_DB_PATH` to select the store used by the
+`aura://runs/{run_id}/conformance` resource. See [MCP evidence API](docs/mcp-evidence-api.md)
+for the trust boundary and response shapes.
+
 Run validation:
 
 ```bash
@@ -163,5 +169,5 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the system boundary and
 
 ## Status
 
-`0.5.0a1` is a research-grade foundation. The next milestones are online LTLf monitors,
-object-centric process discovery, causal conformance checking, and OCEL 2.0 export.
+`0.8.0a1` is a research-grade foundation. The next milestones are online LTLf monitors,
+object-centric process discovery, and OCEL 2.0 export.
