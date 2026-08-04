@@ -11,18 +11,25 @@ from aura_runtime.models import AgentEvent, Finding, ProtocolRecord, ToolManifes
 
 
 class SQLiteEventStore:
-    def __init__(self, path: str | Path = ".aura/aura.db") -> None:
+    def __init__(self, path: str | Path = ".aura/aura.db", *, read_only: bool = False) -> None:
         self.path = Path(path)
+        self.read_only = read_only
 
     def connect(self) -> sqlite3.Connection:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(self.path)
+        if self.read_only:
+            connection = sqlite3.connect(f"file:{self.path.resolve()}?mode=ro", uri=True)
+        else:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            connection = sqlite3.connect(self.path)
         connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA journal_mode=WAL")
+        if not self.read_only:
+            connection.execute("PRAGMA journal_mode=WAL")
         connection.execute("PRAGMA foreign_keys=ON")
         return connection
 
     def initialize(self) -> None:
+        if self.read_only:
+            return
         with self.connect() as connection:
             connection.executescript(
                 """
@@ -129,7 +136,11 @@ class SQLiteEventStore:
         self.initialize()
         with self.connect() as connection:
             rows = connection.execute(
-                "SELECT DISTINCT run_id FROM events ORDER BY run_id"
+                """SELECT run_id FROM events
+                   UNION SELECT run_id FROM findings
+                   UNION SELECT run_id FROM protocol_records
+                   UNION SELECT run_id FROM tool_manifests
+                   ORDER BY run_id"""
             ).fetchall()
         yield from (str(row["run_id"]) for row in rows)
 
