@@ -96,6 +96,16 @@ The incremental monitor supports legacy initialization-based MCP and modern per-
 metadata without collapsing concurrent messages into timestamp order. See
 [MCP causal conformance](docs/conformance.md).
 
+Export the same evidence into an existing OpenTelemetry pipeline without exporting tool
+content by default:
+
+```bash
+aura export-otlp <run-id> --db .aura/aura.db --output traces.json
+```
+
+See [OTLP conformance export](docs/otlp-export.md) for the semantic mapping and explicit
+content opt-in.
+
 Replay reports separate introduced, resolved, and unchanged findings. Run diffs identify
 the common prefix and first divergent event while ignoring timestamps, generated IDs, and
 run IDs. Manifest diffs detect added, removed, and schema-changed tools.
