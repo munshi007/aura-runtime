@@ -6,7 +6,7 @@ from aura_runtime.models import AgentEvent, EventKind, Finding, GateAction, Seve
 from aura_runtime.policy import AuraSpec
 from aura_runtime.replay import compare_manifests, compare_runs, replay_run
 from aura_runtime.store import SQLiteEventStore
-from aura_runtime.verifier import RuntimeVerifier
+from aura_runtime.verifier import OnlineTemporalMonitor, RuntimeVerifier, TemporalMonitorReport
 
 __all__ = [
     "AgentEvent",
@@ -17,14 +17,16 @@ __all__ = [
     "Finding",
     "GateAction",
     "MCPFlightRecorder",
+    "OnlineTemporalMonitor",
     "RuntimeVerifier",
     "SQLiteEventStore",
     "Severity",
     "TraceContract",
+    "TemporalMonitorReport",
     "check_contract",
     "compare_manifests",
     "compare_runs",
     "replay_run",
 ]
 
-__version__ = "0.8.0a1"
+__version__ = "0.9.0a1"

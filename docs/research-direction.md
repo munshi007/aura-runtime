@@ -19,6 +19,7 @@ executions against executable behavioral contracts.
    actions are not misrepresented as one arbitrary total order.
 
 The current alpha implements the evidence boundary, bounded temporal prerequisites,
-SMT-backed concrete constraints, and a first partial-order causal graph for MCP requests,
-responses, and subscriptions. Richer object links and discovered concurrency relations
-remain explicit extension milestones, not claims of completed functionality.
+three-valued bounded future-response monitors, SMT-backed concrete constraints, and a first
+partial-order causal graph for MCP requests, responses, and subscriptions. It does not yet
+claim arbitrary LTLf parsing or compilation. Richer temporal formulae, object links, and
+discovered concurrency relations remain explicit extension milestones.

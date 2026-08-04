@@ -51,16 +51,26 @@ class EventSelector(BaseModel):
     event: EventKind
     tool_matches: list[str] = Field(default_factory=list)
     where: dict[str, Any] = Field(default_factory=dict)
+    correlate: dict[str, str] = Field(default_factory=dict)
     within_events: int | None = Field(default=None, ge=1)
 
-    def matches(self, event: AgentEvent) -> bool:
+    def matches(self, event: AgentEvent, *, reference: AgentEvent | None = None) -> bool:
         if event.kind != self.event:
             return False
         if self.tool_matches and not any(
             fnmatchcase(event.tool_name or "", pattern) for pattern in self.tool_matches
         ):
             return False
-        return all(value_at_path(event, path) == expected for path, expected in self.where.items())
+        if not all(
+            value_at_path(event, path) == expected for path, expected in self.where.items()
+        ):
+            return False
+        if self.correlate and reference is None:
+            return False
+        return all(
+            value_at_path(event, candidate_path) == value_at_path(reference, reference_path)
+            for candidate_path, reference_path in self.correlate.items()
+        )
 
 
 class DataConstraint(BaseModel):
@@ -81,12 +91,17 @@ class Policy(BaseModel):
     effect: Literal["deny", "require_approval"] = "deny"
     on: EventSelector
     require_prior: EventSelector | None = None
+    require_after: EventSelector | None = None
     constraints: list[DataConstraint] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def has_a_requirement(self) -> Policy:
-        if self.require_prior is None and not self.constraints:
-            raise ValueError("policy must define require_prior or constraints")
+        if self.require_prior is None and self.require_after is None and not self.constraints:
+            raise ValueError("policy must define require_prior, require_after, or constraints")
+        if self.require_after is not None and self.require_after.within_events is None:
+            raise ValueError("require_after must define within_events")
+        if self.on.correlate:
+            raise ValueError("on selectors cannot define correlate")
         return self
 
 

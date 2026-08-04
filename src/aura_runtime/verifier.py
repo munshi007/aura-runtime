@@ -3,10 +3,60 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Any
+from enum import StrEnum
+from typing import Any, Literal
+from uuid import UUID
 
-from aura_runtime.models import AgentEvent, Finding
+from pydantic import BaseModel, ConfigDict, Field
+
+from aura_runtime.models import AgentEvent, EventKind, Finding
 from aura_runtime.policy import AuraSpec, DataConstraint, Policy, value_at_path
+
+
+class TemporalVerdict(StrEnum):
+    PENDING = "pending"
+    SATISFIED = "satisfied"
+    VIOLATED = "violated"
+
+
+class PendingObligation(BaseModel):
+    """Content-free snapshot of one bounded future obligation."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    policy_id: str
+    trigger_event_id: UUID
+    trigger_index: int = Field(ge=0)
+    deadline_index: int = Field(ge=1)
+    remaining_events: int = Field(ge=1)
+    verdict: TemporalVerdict = TemporalVerdict.PENDING
+
+
+class TemporalMonitorReport(BaseModel):
+    """Three-valued state of a finite-trace monitor at the current prefix."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    run_id: str | None
+    observed_event_count: int = Field(ge=0)
+    pending_obligation_count: int = Field(ge=0)
+    satisfied_obligation_count: int = Field(ge=0)
+    violated_obligation_count: int = Field(ge=0)
+    pending: list[PendingObligation]
+    findings: list[Finding]
+    finalized: bool
+    content_included: Literal[False] = False
+
+
+class _Obligation:
+    def __init__(self, policy: Policy, trigger: AgentEvent, trigger_index: int) -> None:
+        assert policy.require_after is not None
+        assert policy.require_after.within_events is not None
+        self.policy = policy
+        self.trigger = trigger
+        self.trigger_index = trigger_index
+        self.deadline_index = trigger_index + policy.require_after.within_events
+        self.evidence_event_ids = [trigger.event_id]
 
 
 class ConstraintEvaluator:
@@ -81,13 +131,15 @@ class RuntimeVerifier:
         self.constraint_evaluator = constraint_evaluator or ConstraintEvaluator()
 
     def verify(self, events: Iterable[AgentEvent]) -> list[Finding]:
-        history: list[AgentEvent] = []
+        """Verify a complete finite trace, concluding pending future obligations at EOF."""
+        monitor = OnlineTemporalMonitor(
+            self.spec,
+            constraint_evaluator=self.constraint_evaluator,
+        )
         findings: list[Finding] = []
         for event in events:
-            if history and event.run_id != history[0].run_id:
-                raise ValueError("verify() accepts events from exactly one run")
-            findings.extend(self.verify_event(event, history))
-            history.append(event)
+            findings.extend(monitor.observe(event))
+        findings.extend(monitor.finalize())
         return findings
 
     def verify_event(self, event: AgentEvent, history: list[AgentEvent]) -> list[Finding]:
@@ -109,7 +161,9 @@ class RuntimeVerifier:
             window = policy.require_prior.within_events or len(history)
             candidates = history[-window:]
             evidence = [
-                candidate for candidate in candidates if policy.require_prior.matches(candidate)
+                candidate
+                for candidate in candidates
+                if policy.require_prior.matches(candidate, reference=event)
             ]
             if not evidence:
                 findings.append(
@@ -145,3 +199,131 @@ class RuntimeVerifier:
                 )
 
         return findings
+
+
+class OnlineTemporalMonitor:
+    """Incrementally monitor bounded future obligations over one agent run."""
+
+    def __init__(
+        self,
+        spec: AuraSpec,
+        *,
+        constraint_evaluator: ConstraintEvaluator | None = None,
+    ) -> None:
+        self.spec = spec
+        self._immediate = RuntimeVerifier(
+            spec,
+            constraint_evaluator=constraint_evaluator,
+        )
+        self._history: list[AgentEvent] = []
+        self._pending: list[_Obligation] = []
+        self._findings: list[Finding] = []
+        self._satisfied = 0
+        self._violated = 0
+        self._finalized = False
+
+    def observe(self, event: AgentEvent) -> list[Finding]:
+        """Advance the monitor by one event and return newly conclusive violations."""
+        if self._finalized:
+            raise ValueError("cannot observe events after the monitor is finalized")
+        if self._history and event.run_id != self._history[0].run_id:
+            raise ValueError("monitor accepts events from exactly one run")
+
+        index = len(self._history)
+        temporal_findings = self._advance_obligations(event, index)
+        findings = temporal_findings + self._immediate.verify_event(event, self._history)
+        for policy in self.spec.policies:
+            if policy.require_after is not None and policy.on.matches(event):
+                self._pending.append(_Obligation(policy, event, index))
+        self._history.append(event)
+        self._findings.extend(temporal_findings)
+
+        if event.kind == EventKind.RUN_COMPLETED:
+            findings.extend(self.finalize(conclusion_event=event))
+        return findings
+
+    def finalize(self, *, conclusion_event: AgentEvent | None = None) -> list[Finding]:
+        """Declare the current prefix complete and violate unresolved obligations."""
+        if self._finalized:
+            return []
+        findings = [
+            self._violation(
+                obligation,
+                conclusion_event or obligation.trigger,
+                "finite trace ended before the required future event",
+            )
+            for obligation in self._pending
+        ]
+        self._violated += len(findings)
+        self._pending.clear()
+        self._findings.extend(findings)
+        self._finalized = True
+        return findings
+
+    def report(self) -> TemporalMonitorReport:
+        run_id = self._history[0].run_id if self._history else None
+        index = len(self._history)
+        return TemporalMonitorReport(
+            run_id=run_id,
+            observed_event_count=index,
+            pending_obligation_count=len(self._pending),
+            satisfied_obligation_count=self._satisfied,
+            violated_obligation_count=self._violated,
+            pending=[
+                PendingObligation(
+                    policy_id=item.policy.id,
+                    trigger_event_id=item.trigger.event_id,
+                    trigger_index=item.trigger_index,
+                    deadline_index=item.deadline_index,
+                    remaining_events=item.deadline_index - index + 1,
+                )
+                for item in self._pending
+            ],
+            findings=self._findings,
+            finalized=self._finalized,
+        )
+
+    def _advance_obligations(self, event: AgentEvent, index: int) -> list[Finding]:
+        findings: list[Finding] = []
+        still_pending: list[_Obligation] = []
+        for obligation in self._pending:
+            obligation.evidence_event_ids.append(event.event_id)
+            selector = obligation.policy.require_after
+            assert selector is not None
+            if selector.matches(event, reference=obligation.trigger):
+                self._satisfied += 1
+            elif index >= obligation.deadline_index:
+                findings.append(
+                    self._violation(
+                        obligation,
+                        event,
+                        f"required event was not observed within "
+                        f"{selector.within_events} subsequent events",
+                    )
+                )
+                self._violated += 1
+            else:
+                still_pending.append(obligation)
+        self._pending = still_pending
+        return findings
+
+    @staticmethod
+    def _violation(
+        obligation: _Obligation,
+        conclusion_event: AgentEvent,
+        reason: str,
+    ) -> Finding:
+        selector = obligation.policy.require_after
+        assert selector is not None
+        evidence = list(dict.fromkeys(obligation.evidence_event_ids))
+        if conclusion_event.event_id not in evidence:
+            evidence.append(conclusion_event.event_id)
+        return Finding(
+            run_id=conclusion_event.run_id,
+            policy_id=obligation.policy.id,
+            severity=obligation.policy.severity,
+            message=f"Missing required future event {selector.event.value}: {reason}",
+            event_id=conclusion_event.event_id,
+            evidence_event_ids=evidence,
+            engine="bounded-response-monitor",
+        )

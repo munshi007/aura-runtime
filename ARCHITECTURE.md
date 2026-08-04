@@ -32,7 +32,7 @@ flowchart TD
 | `models` | Canonical events and findings |
 | `store` | SQLite WAL evidence and finding storage |
 | `policy` | AuraSpec schema, selectors, and YAML loading |
-| `verifier` | Temporal checks and Z3-backed data constraints |
+| `verifier` | Online past/future temporal monitors and Z3-backed data constraints |
 | `adapters.mcp` | MCP JSON-RPC normalization and correlation |
 | `adapters.otel` | OTLP/JSON span normalization |
 | `flight` | Hash-chained MCP transcript and policy decisions |
@@ -44,10 +44,13 @@ flowchart TD
 
 ## Near-term design
 
-The alpha evaluates bounded-history prerequisites online. The interface is intentionally
-compatible with compiling richer temporal clauses into finite-state monitors. SQLite is
-the local default; a storage protocol will allow Postgres or an immutable object store
-without changing verification semantics.
+The alpha evaluates bounded-history prerequisites and bounded future-response obligations
+online. Future obligations remain pending while a response is still possible, become
+satisfied when a matching event arrives, and become violated at the earliest deadline or
+when the trace is explicitly finalized. The interface is intentionally compatible with
+compiling richer temporal clauses into finite-state monitors. SQLite is the local default;
+a storage protocol will allow Postgres or an immutable object store without changing
+verification semantics.
 
 ## Flight-recorder decision boundary
 
