@@ -199,6 +199,8 @@ def test_mcp_evidence_tools_declare_read_only_annotations() -> None:
                 "aura_conformance",
                 "aura_explain_issue",
                 "aura_temporal_state",
+                "aura_object_contract",
+                "aura_object_state",
             }
         }
         assert set(evidence) == {
@@ -206,6 +208,8 @@ def test_mcp_evidence_tools_declare_read_only_annotations() -> None:
             "aura_conformance",
             "aura_explain_issue",
             "aura_temporal_state",
+            "aura_object_contract",
+            "aura_object_state",
         }
         assert all(tool.annotations.read_only_hint is True for tool in evidence.values())
         assert all(tool.annotations.open_world_hint is False for tool in evidence.values())

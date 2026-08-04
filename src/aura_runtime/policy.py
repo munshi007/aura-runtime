@@ -166,6 +166,12 @@ class AuraSpec(BaseModel):
         }
         return event.model_copy(update={"objects": [unique[key] for key in sorted(unique)]})
 
+    def expected_object_types(self, event: AgentEvent) -> list[str]:
+        """Return object types whose binding selectors apply, even if extraction fails."""
+        return sorted(
+            {binding.object_type for binding in self.object_bindings if binding.on.matches(event)}
+        )
+
     @classmethod
     def from_yaml(cls, path: str | Path) -> AuraSpec:
         return cls.from_yaml_text(Path(path).read_text(encoding="utf-8"))

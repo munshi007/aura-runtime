@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import uuid4
 
 import typer
@@ -25,6 +25,7 @@ from aura_runtime.integrations.goose import (
 )
 from aura_runtime.integrations.goose import goose_config_path
 from aura_runtime.models import AgentEvent
+from aura_runtime.object_contract import ObjectContract, ObjectContractMonitor
 from aura_runtime.object_process import compare_object_behavior, discover_object_behavior
 from aura_runtime.ocel_export import events_to_ocel_json
 from aura_runtime.otlp_export import protocol_records_to_otlp_json
@@ -45,6 +46,8 @@ manifests_app = typer.Typer(help="Compare captured MCP tool manifests.", no_args
 objects_app = typer.Typer(
     help="Discover and compare object-centric behavior.", no_args_is_help=True
 )
+object_contract_app = typer.Typer(help="Create and check object contracts.", no_args_is_help=True)
+objects_app.add_typer(object_contract_app, name="contract")
 app.add_typer(contract_app, name="contract")
 app.add_typer(connect_app, name="connect")
 app.add_typer(disconnect_app, name="disconnect")
@@ -274,6 +277,86 @@ def compare_objects(
         raise typer.Exit(code=2)
 
 
+@object_contract_app.command("create")
+def create_object_contract(
+    run_ids: Annotated[
+        list[str], typer.Option("--baseline-run", help="Trusted run; repeat for a cohort.")
+    ],
+    db: DB_OPTION = Path(".aura/aura.db"),
+    output: Annotated[Path, typer.Option("--output")] = Path("aura-object-contract.json"),
+    effect: Annotated[
+        Literal["deny", "require_approval"], typer.Option("--effect")
+    ] = "deny",
+) -> None:
+    """Compile trusted object behavior into a content-addressed contract."""
+    try:
+        profile = discover_object_behavior(_selected_events(SQLiteEventStore(db), run_ids))
+        contract = ObjectContract.from_profile(profile, effect=effect)
+    except ValueError as error:
+        raise _as_cli_error(error) from error
+    _emit_json(contract.model_dump(mode="json"), output)
+
+
+def _monitor_object_events(
+    contract: ObjectContract,
+    events: list[AgentEvent],
+    *,
+    final: bool,
+) -> ObjectContractMonitor:
+    monitor = ObjectContractMonitor(contract)
+    for event in events:
+        if event.objects:
+            monitor.observe(event, commit=True)
+    if final:
+        monitor.finalize()
+    return monitor
+
+
+@object_contract_app.command("check")
+def check_object_contract(
+    contract_path: Annotated[Path, typer.Argument(exists=True, readable=True)],
+    run_ids: Annotated[
+        list[str], typer.Option("--run", help="Candidate run; repeat for a cohort.")
+    ],
+    db: DB_OPTION = Path(".aura/aura.db"),
+    output: Annotated[Path | None, typer.Option("--output")] = None,
+) -> None:
+    """Replay completed runs against an object contract and fail on violations."""
+    try:
+        contract = ObjectContract.from_json(contract_path)
+        monitor = _monitor_object_events(
+            contract,
+            _selected_events(SQLiteEventStore(db), run_ids),
+            final=True,
+        )
+    except ValueError as error:
+        raise _as_cli_error(error) from error
+    report = monitor.report()
+    _emit_json(report.model_dump(mode="json"), output)
+    if report.violation_count:
+        raise typer.Exit(code=2)
+
+
+@objects_app.command("state")
+def object_state(
+    run_id: Annotated[str, typer.Argument()],
+    contract_path: Annotated[
+        Path, typer.Option("--contract", exists=True, readable=True)
+    ],
+    db: DB_OPTION = Path(".aura/aura.db"),
+) -> None:
+    """Inspect accepted object state for a captured run prefix."""
+    try:
+        monitor = _monitor_object_events(
+            ObjectContract.from_json(contract_path),
+            SQLiteEventStore(db).events(run_id),
+            final=False,
+        )
+    except ValueError as error:
+        raise _as_cli_error(error) from error
+    _emit_json(monitor.report().model_dump(mode="json"))
+
+
 @app.command()
 def report(
     run_id: Annotated[str, typer.Argument()],
@@ -412,6 +495,9 @@ def contract_check(
 def proxy(
     context: typer.Context,
     policy: Annotated[Path | None, typer.Option("--policy", exists=True, readable=True)] = None,
+    object_contract: Annotated[
+        Path | None, typer.Option("--object-contract", exists=True, readable=True)
+    ] = None,
     mode: Annotated[EnforcementMode, typer.Option("--mode")] = EnforcementMode.OBSERVE,
     db: DB_OPTION = Path(".aura/aura.db"),
     run_id: Annotated[str | None, typer.Option("--run-id")] = None,
@@ -422,15 +508,20 @@ def proxy(
         command = command[1:]
     if not command:
         raise typer.BadParameter("pass an upstream command after --")
-    if mode == EnforcementMode.ENFORCE and policy is None:
-        raise typer.BadParameter("--mode enforce requires --policy")
+    if mode == EnforcementMode.ENFORCE and policy is None and object_contract is None:
+        raise typer.BadParameter("--mode enforce requires --policy or --object-contract")
+    if object_contract is not None and policy is None:
+        raise typer.BadParameter("--object-contract requires --policy for object bindings")
 
     store = SQLiteEventStore(db)
     spec = AuraSpec.from_yaml(policy) if policy else None
+    if object_contract is not None and spec is not None and not spec.object_bindings:
+        raise typer.BadParameter("--object-contract requires AuraSpec object_bindings")
     recorder = MCPFlightRecorder(
         run_id=run_id or f"mcp-{uuid4()}",
         store=store,
         spec=spec,
+        object_contract=ObjectContract.from_json(object_contract) if object_contract else None,
         mode=mode,
     )
     exit_code = asyncio.run(run_stdio_proxy(command, recorder))

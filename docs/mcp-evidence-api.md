@@ -20,6 +20,10 @@ AURA_DB_PATH=.aura/aura.db uv run mcp run src/aura_runtime/mcp_server.py
 | `aura_status` | List bounded summaries for every evidence-bearing run | Counts, verdicts, versions, and run IDs only |
 | `aura_conformance` | Return the deterministic protocol report and causal graph | Message shape metadata and content hashes; no wire messages |
 | `aura_explain_issue` | Return an issue plus its causal neighborhood, bounded to 0-5 hops | Same content-free node model |
+| `aura_object_behavior` | Discover aggregate object lifecycles for run cohorts | Object types, activities, and counts; no object IDs |
+| `aura_object_conformance` | Compare trusted and candidate object behavior | Structural additions and removals only |
+| `aura_object_contract` | Validate a content-addressed object contract | Contract metadata and hash only |
+| `aura_object_state` | Replay pseudonymous lifecycle state and counterexamples | Contract-scoped object pseudonyms; no raw IDs or payloads |
 | `aura://runs/{run_id}/conformance` | Application-controlled resource for a full conformance report | Same content-free conformance model |
 
 All inspection tools declare MCP read-only, idempotent, closed-world annotations. Results
@@ -33,6 +37,10 @@ These evidence APIs never return captured prompts, MCP `arguments`, tool results
 event `data`. `content_included: false` is explicit on run summaries and issue
 neighborhoods. Causal nodes expose only protocol metadata, forwarding decisions, sequence
 numbers, and content hashes.
+
+Object state uses deterministic, contract-scoped SHA-256 pseudonyms. This supports stable
+correlation within one contract but is pseudonymization, not anonymity. Tool and activity
+names remain structural metadata and can be sensitive in some deployments.
 
 The separate `aura export-otlp --include-content` command remains the explicit opt-in path
 for exporting tool arguments and results. There is intentionally no equivalent content

@@ -20,6 +20,11 @@ from aura_runtime.conformance import (
 )
 from aura_runtime.contract import TraceContract, check_contract
 from aura_runtime.flight import verify_protocol_chain
+from aura_runtime.object_contract import (
+    ObjectContract,
+    ObjectContractMonitor,
+    ObjectMonitorReport,
+)
 from aura_runtime.object_process import (
     ObjectBehaviorProfile,
     ObjectConformanceReport,
@@ -302,6 +307,46 @@ def aura_object_conformance(
         discover_object_behavior(baseline_events),
         discover_object_behavior(candidate_events),
     )
+
+
+@mcp.tool(
+    title="Validate Aura object contract",
+    annotations=READ_ONLY,
+    structured_output=True,
+)
+def aura_object_contract(contract_json: str) -> dict[str, object]:
+    """Validate a content-addressed contract and return only its structural metadata."""
+    contract = ObjectContract.model_validate_json(contract_json)
+    return {
+        "schema_version": contract.schema_version,
+        "contract_hash": contract.contract_hash,
+        "effect": contract.effect,
+        "object_type_count": len(contract.object_types),
+        "interaction_count": len(contract.interactions),
+        "valid": True,
+        "content_included": False,
+    }
+
+
+@mcp.tool(
+    title="Inspect Aura object contract state",
+    annotations=READ_ONLY,
+    structured_output=True,
+)
+def aura_object_state(
+    run_id: str,
+    contract_json: str,
+    db_path: str = ".aura/aura.db",
+    final: bool = False,
+) -> ObjectMonitorReport:
+    """Replay one run into pseudonymous lifecycle state and structural violations."""
+    monitor = ObjectContractMonitor(ObjectContract.model_validate_json(contract_json))
+    for event in _store(db_path).events(run_id):
+        if event.objects:
+            monitor.observe(event, commit=True)
+    if final:
+        monitor.finalize()
+    return monitor.report()
 
 
 @mcp.tool(annotations=READ_ONLY, structured_output=True)

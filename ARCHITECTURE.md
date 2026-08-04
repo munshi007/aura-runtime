@@ -42,6 +42,7 @@ flowchart TD
 | `mcp_server` | Agent-accessible status and finding tools |
 | `ocel_export` | Privacy-safe OCEL 2.0 object-centric exchange |
 | `object_process` | Object-centric lifecycle discovery and structural drift |
+| `object_contract` | Content-addressed lifecycle contracts and online object state |
 | `cli` | Local ingestion, verification, and reports |
 
 ## Near-term design
@@ -61,6 +62,11 @@ intercepts a violating `tools/call` request and returns a namespaced JSON-RPC er
 starting the upstream side effect. Policy effects distinguish unconditional denial from
 approval-required decisions. The transcript records both the blocked request and the
 synthetic response, preserving an auditable explanation of what did not execute.
+
+Object-contract enforcement is transactional at this boundary. Aura binds object identities
+from the canonical event, assesses the proposed transition, and commits it to accepted state
+only if the request is forwarded. Reports replace raw identities with contract-scoped SHA-256
+pseudonyms. The contract hash detects content changes; it is not an author signature.
 
 ## Replay identity
 

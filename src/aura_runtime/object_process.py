@@ -102,7 +102,8 @@ class ObjectConformanceReport(BaseModel):
     content_included: Literal[False] = False
 
 
-def _activity(event: AgentEvent) -> str:
+def event_activity(event: AgentEvent) -> str:
+    """Return the content-free activity identity shared by discovery and monitoring."""
     if event.tool_name:
         return f"{event.kind.value}:{event.tool_name}"
     return event.kind.value
@@ -140,7 +141,7 @@ def discover_object_behavior(events: list[AgentEvent]) -> ObjectBehaviorProfile:
             traces[(event.run_id, object_type, object_id)].append(event)
         object_types = sorted({object_type for object_type, _ in identities})
         for left, right in combinations(object_types, 2):
-            interactions[(left, right, _activity(event))] += 1
+            interactions[(left, right, event_activity(event))] += 1
 
     if not traces:
         raise ValueError("events do not contain business-object references")
@@ -157,7 +158,7 @@ def discover_object_behavior(events: list[AgentEvent]) -> ObjectBehaviorProfile:
         transition_counts: Counter[tuple[str, str]] = Counter()
         typed_traces = by_type[object_type]
         for trace in typed_traces:
-            activities = [_activity(event) for event in trace]
+            activities = [event_activity(event) for event in trace]
             activity_counts.update(activities)
             start_counts[activities[0]] += 1
             end_counts[activities[-1]] += 1
