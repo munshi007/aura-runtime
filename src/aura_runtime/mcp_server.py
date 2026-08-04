@@ -20,6 +20,7 @@ from aura_runtime.conformance import (
 )
 from aura_runtime.contract import TraceContract, check_contract
 from aura_runtime.flight import verify_protocol_chain
+from aura_runtime.models import AgentEvent
 from aura_runtime.object_contract import (
     ObjectContract,
     ObjectContractMonitor,
@@ -38,6 +39,7 @@ from aura_runtime.verifier import (
     LTLfRuntimeReport,
     OnlineLTLfMonitor,
     OnlineTemporalMonitor,
+    ShieldActionReport,
     TemporalMonitorReport,
 )
 
@@ -262,6 +264,27 @@ def aura_ltlf_state(
     if final:
         monitor.finalize()
     return monitor.report()
+
+
+@mcp.tool(
+    title="Preview an action with the Aura shield",
+    annotations=READ_ONLY,
+    structured_output=True,
+)
+def aura_shield_action(
+    run_id: str,
+    policy_yaml: str,
+    proposed_event: dict[str, object],
+    db_path: str = ".aura/aura.db",
+) -> ShieldActionReport:
+    """Return safe/violating classification and nearest safe valuations."""
+    monitor = OnlineLTLfMonitor(AuraSpec.from_yaml_text(policy_yaml))
+    for event in _store(db_path).events(run_id):
+        monitor.observe(event)
+    proposed = AgentEvent.model_validate(proposed_event)
+    if proposed.run_id != run_id:
+        raise ValueError("proposed event run_id must match the captured run")
+    return monitor.preview(proposed)
 
 
 @mcp.tool(annotations=READ_ONLY, structured_output=True)

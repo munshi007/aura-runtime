@@ -140,6 +140,29 @@ ltlf_policies:
                     "db_path": str(db_path),
                 },
             )
+            shield = await client.call_tool(
+                "aura_shield_action",
+                {
+                    "run_id": "replay-run",
+                    "policy_yaml": """
+version: "0.1"
+ltlf_policies:
+  - id: no-delete
+    description: Delete never occurs
+    formula: G !delete
+    propositions:
+      delete:
+        event: tool.call.requested
+        tool_matches: [delete_*]
+""",
+                    "proposed_event": {
+                        "run_id": "replay-run",
+                        "kind": "tool.call.requested",
+                        "tool_name": "delete_customer",
+                    },
+                    "db_path": str(db_path),
+                },
+            )
         assert replay.structured_content["read_only"] is True
         assert replay.structured_content["replayed_finding_count"] == 1
         assert temporal.structured_content["pending_obligation_count"] == 1
@@ -148,6 +171,10 @@ ltlf_policies:
         assert ltlf.structured_content["policies"][0]["monitor"]["prefix_verdict"] == (
             "permanently_violated"
         )
+        assert shield.structured_content["safe"] is False
+        assert shield.structured_content["policies"][0]["assessment"]["alternatives"][0][
+            "changed_propositions"
+        ] == ["delete"]
 
     asyncio.run(call_status())
 
@@ -222,6 +249,7 @@ def test_mcp_evidence_tools_declare_read_only_annotations() -> None:
                 "aura_explain_issue",
                 "aura_temporal_state",
                 "aura_ltlf_state",
+                "aura_shield_action",
                 "aura_object_contract",
                 "aura_object_state",
             }
@@ -232,6 +260,7 @@ def test_mcp_evidence_tools_declare_read_only_annotations() -> None:
             "aura_explain_issue",
             "aura_temporal_state",
             "aura_ltlf_state",
+            "aura_shield_action",
             "aura_object_contract",
             "aura_object_state",
         }

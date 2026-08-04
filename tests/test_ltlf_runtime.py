@@ -106,7 +106,32 @@ def test_flight_recorder_can_deny_a_permanently_violating_action(tmp_path) -> No
 
     assert result.forward is False
     assert result.action == GateAction.DENY
-    assert recorder.ltlf_report().findings[0].policy_id == "lifecycle"
+    assert result.shield is not None
+    assert result.shield.safe is False
+    assert result.response["error"]["data"]["aura.shield"]["safe"] is False
+    assert result.findings[0].policy_id == "lifecycle"
+
+
+def test_blocked_proposal_does_not_poison_accepted_ltlf_state(tmp_path) -> None:
+    recorder = MCPFlightRecorder(
+        run_id="run-ltlf",
+        store=SQLiteEventStore(tmp_path / "aura.db"),
+        spec=spec("G !delete"),
+        mode=EnforcementMode.ENFORCE,
+    )
+    recorder.handle_client_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "delete_customer", "arguments": {}},
+        }
+    )
+
+    report = recorder.ltlf_report()
+
+    assert report.policies[0].monitor.prefix_verdict != "permanently_violated"
+    assert report.policies[0].monitor.observed_event_count == 1
 
 
 def test_ltlf_state_cli_reports_prefix_and_final_verdict(tmp_path) -> None:
@@ -149,3 +174,46 @@ ltlf_policies:
     assert final.exit_code == 2
     final_monitor = json.loads(final.stdout)["policies"][0]["monitor"]
     assert final_monitor["finite_trace_verdict"] == "fail"
+
+
+def test_shield_action_cli_returns_repairs_without_an_llm(tmp_path) -> None:
+    db_path = tmp_path / "aura.db"
+    SQLiteEventStore(db_path).append_event(event(EventKind.RUN_STARTED, 0))
+    policy_path = tmp_path / "aura.yaml"
+    policy_path.write_text(
+        """version: "0.1"
+ltlf_policies:
+  - id: lifecycle
+    description: Never delete
+    formula: G !delete
+    propositions:
+      delete:
+        event: tool.call.requested
+        tool_matches: [delete_*]
+""",
+        encoding="utf-8",
+    )
+    event_path = tmp_path / "proposed.json"
+    proposed = event(EventKind.TOOL_CALL_REQUESTED, 1, tool_name="delete_customer")
+    event_path.write_text(proposed.model_dump_json(), encoding="utf-8")
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "shield-action",
+            "run-ltlf",
+            "--policy",
+            str(policy_path),
+            "--event",
+            str(event_path),
+            "--db",
+            str(db_path),
+        ],
+    )
+
+    assert result.exit_code == 2
+    report = json.loads(result.stdout)
+    assert report["safe"] is False
+    assert report["policies"][0]["assessment"]["alternatives"][0][
+        "changed_propositions"
+    ] == ["delete"]

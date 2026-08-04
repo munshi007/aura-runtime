@@ -66,6 +66,26 @@ MCP clients can call the read-only `aura_ltlf_state` tool with the run ID and po
 Both surfaces return content-free monitor state; they do not return tool arguments or
 results.
 
+## Anticipatory shielding
+
+Aura can preview a proposed event without advancing the accepted monitor state:
+
+```bash
+aura shield-action <run-id> --policy aura.yaml --event proposed-event.json
+```
+
+The report classifies the proposal as `safe` or `permanently_violating`. For a violating
+proposal, Aura enumerates the nearest safe proposition valuations by Hamming distance and
+reports which propositions must change. The MCP tool `aura_shield_action` exposes the same
+read-only structured report.
+
+In enforce mode the proxy attaches this report to `error.data.aura.shield`. A rejected
+attempt remains auditable evidence but does not advance accepted LTLf state. Repair values
+are exact consequences of the formula automaton, not model-generated recommendations.
+
+No LLM or external API is required for parsing, progression, shielding, enforcement, CLI
+use, MCP use, or the test suite.
+
 ## Exactness and bounds
 
 The implementation explores reachable residual formulas over all proposition valuations.

@@ -22,6 +22,7 @@ from aura_runtime.verifier import (
     OnlineLTLfMonitor,
     OnlineTemporalMonitor,
     RuntimeVerifier,
+    ShieldActionReport,
     TemporalMonitorReport,
 )
 
@@ -44,6 +45,7 @@ __all__ = [
     "ObjectConformanceReport",
     "ObjectMonitorReport",
     "RuntimeVerifier",
+    "ShieldActionReport",
     "SQLiteEventStore",
     "Severity",
     "TraceContract",
@@ -56,4 +58,4 @@ __all__ = [
     "discover_object_behavior",
 ]
 
-__version__ = "0.13.0a1"
+__version__ = "0.14.0a1"
