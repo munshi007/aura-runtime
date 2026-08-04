@@ -114,6 +114,41 @@ def test_wildcard_tool_overlap_remains_feasible() -> None:
     assert EventAlphabet(item).is_feasible(frozenset({"delete", "send"}))
 
 
+def test_symbolic_alphabet_matches_reference_predicate() -> None:
+    item = policy(
+        {
+            "delete": {
+                "event": "tool.call.requested",
+                "tool_matches": ["delete_customer"],
+            },
+            "send": {
+                "event": "tool.call.requested",
+                "tool_matches": ["send_email"],
+            },
+            "any_tool": {
+                "event": "tool.call.requested",
+                "tool_matches": ["*"],
+            },
+            "approval": {"event": "human.approval"},
+        },
+        "F any_tool",
+    )
+    alphabet = EventAlphabet(item)
+    expected = {
+        frozenset(name for index, name in enumerate(alphabet.propositions) if mask & (1 << index))
+        for mask in range(2 ** len(alphabet.propositions))
+        if alphabet.is_feasible(
+            frozenset(
+                name
+                for index, name in enumerate(alphabet.propositions)
+                if mask & (1 << index)
+            )
+        )
+    }
+
+    assert set(alphabet.valuations()) == expected
+
+
 def test_strategy_game_removes_impossible_joint_events() -> None:
     item = policy(
         {
@@ -130,4 +165,5 @@ def test_strategy_game_removes_impossible_joint_events() -> None:
     assert report.strategy.status == "unachievable"
     assert report.strategy.total_valuation_count == 4
     assert report.strategy.feasible_valuation_count == 3
+    assert report.strategy.valuation_backend == "z3"
     assert report.alphabet.rejected_valuation_count == 1

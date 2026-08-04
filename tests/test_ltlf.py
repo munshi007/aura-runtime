@@ -9,6 +9,7 @@ from aura_runtime.ltlf import (
     atoms,
     parse_ltlf,
 )
+from aura_runtime.strategy_backend import ExplicitProgressionBackend
 
 
 def test_parser_supports_boolean_and_temporal_surface() -> None:
@@ -174,6 +175,8 @@ def test_strategy_synthesis_finds_a_winning_controller() -> None:
     report = LTLfMonitor("F done").synthesize_strategy({"done"})
 
     assert report.status == "realizable"
+    assert report.strategy_backend == "explicit_progression"
+    assert report.valuation_backend == "explicit"
     assert report.turn_semantics == "agent_then_environment"
     assert report.termination_control == "agent"
     assert report.winning_state_count == report.reachable_state_count
@@ -181,6 +184,18 @@ def test_strategy_synthesis_finds_a_winning_controller() -> None:
     assert initial.true_agent_propositions == ["done"]
     assert initial.rank == 1
     assert report.counterstrategy == []
+
+
+def test_strategy_backend_is_replaceable_without_changing_the_report() -> None:
+    class NamedBackend(ExplicitProgressionBackend):
+        name = "test_progression"
+
+    report = LTLfMonitor("F done").synthesize_strategy(
+        {"done"}, backend=NamedBackend()
+    )
+
+    assert report.status == "realizable"
+    assert report.strategy_backend == "test_progression"
 
 
 def test_environment_goal_has_only_a_cooperative_strategy() -> None:

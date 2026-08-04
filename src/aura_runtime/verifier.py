@@ -430,7 +430,7 @@ class OnlineLTLfMonitor:
         policies = []
         for policy in self.spec.ltlf_policies:
             monitor = self._monitors[policy.id]
-            alphabet = EventAlphabet(policy)
+            alphabet = EventAlphabet(policy, monitor.propositions)
             true_propositions = {
                 name
                 for name in monitor.propositions
@@ -528,7 +528,7 @@ class OnlineLTLfMonitor:
         policies = []
         for policy in self.spec.ltlf_policies:
             monitor = self._monitors[policy.id]
-            alphabet = EventAlphabet(policy)
+            alphabet = EventAlphabet(policy, monitor.propositions)
             policies.append(
                 PolicyStrategyReport(
                     policy_id=policy.id,
@@ -540,7 +540,7 @@ class OnlineLTLfMonitor:
                             for name in monitor.propositions
                             if policy.control_of(name) == "agent"
                         },
-                        valuation_filter=alphabet.is_feasible,
+                        valuation_space=alphabet,
                     ),
                 )
             )

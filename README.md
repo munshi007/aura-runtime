@@ -265,6 +265,6 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the system boundary and
 
 ## Status
 
-`0.17.0a1` is a research-grade foundation. The next milestones are signed evidence
+`0.18.0a1` is a research-grade foundation. The next milestones are signed evidence
 bundles, symbolic proposition handling for larger formulas, and richer conformance beyond
 directly-follows structure.

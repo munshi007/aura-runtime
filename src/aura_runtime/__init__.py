@@ -18,6 +18,8 @@ from aura_runtime.object_process import (
 from aura_runtime.policy import AuraSpec
 from aura_runtime.replay import compare_manifests, compare_runs, replay_run
 from aura_runtime.store import SQLiteEventStore
+from aura_runtime.strategy_backend import ExplicitProgressionBackend, StrategyBackend
+from aura_runtime.valuation import ExplicitValuationSpace, ValuationSpace
 from aura_runtime.verifier import (
     LTLfRuntimeReport,
     OnlineLTLfMonitor,
@@ -36,6 +38,8 @@ __all__ = [
     "EnforcementMode",
     "EventAlphabet",
     "EventAlphabetReport",
+    "ExplicitProgressionBackend",
+    "ExplicitValuationSpace",
     "Finding",
     "GateAction",
     "MCPFlightRecorder",
@@ -54,7 +58,9 @@ __all__ = [
     "SQLiteEventStore",
     "Severity",
     "TraceContract",
+    "StrategyBackend",
     "TemporalMonitorReport",
+    "ValuationSpace",
     "check_contract",
     "compare_manifests",
     "compare_object_behavior",
@@ -63,4 +69,4 @@ __all__ = [
     "discover_object_behavior",
 ]
 
-__version__ = "0.17.0a1"
+__version__ = "0.18.0a1"
