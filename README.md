@@ -72,6 +72,19 @@ The Goose recipes exercise a known-good tool sequence and an unapproved destruct
 regression without modifying or vendoring Goose. Aura retains the MCP evidence and checks
 both runs against the committed trace contract.
 
+Enroll an existing Goose installation without editing its agent or MCP server code:
+
+```bash
+aura connect goose --dry-run
+aura connect goose --mode observe --policy ./aura.yaml
+aura doctor goose
+```
+
+Aura backs up Goose's YAML configuration, wraps only stdio extensions, preserves their
+environment and operational settings, and can restore them with `aura disconnect goose`.
+See [zero-code Goose onboarding](docs/goose-onboarding.md) for the safety model and exact
+observability boundary.
+
 Replay reports separate introduced, resolved, and unchanged findings. Run diffs identify
 the common prefix and first divergent event while ignoring timestamps, generated IDs, and
 run IDs. Manifest diffs detect added, removed, and schema-changed tools.
@@ -129,5 +142,5 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the system boundary and
 
 ## Status
 
-`0.4.0a1` is a research-grade foundation. The next milestones are online LTLf monitors,
+`0.5.0a1` is a research-grade foundation. The next milestones are online LTLf monitors,
 object-centric process discovery, causal conformance checking, and OCEL 2.0 export.
