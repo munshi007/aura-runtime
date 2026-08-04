@@ -135,6 +135,8 @@ class MCPFlightRecorder:
         return self.monitor.report() if self.monitor is not None else None
 
     def _record_event(self, event: AgentEvent) -> list[Finding]:
+        if self.spec is not None:
+            event = self.spec.bind_objects(event)
         findings = self.monitor.observe(event) if self.monitor is not None else []
         self.store.append_event(event)
         self.history.append(event)

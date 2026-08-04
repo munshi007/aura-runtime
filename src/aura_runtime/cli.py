@@ -25,6 +25,7 @@ from aura_runtime.integrations.goose import (
 )
 from aura_runtime.integrations.goose import goose_config_path
 from aura_runtime.models import AgentEvent
+from aura_runtime.ocel_export import events_to_ocel_json
 from aura_runtime.otlp_export import protocol_records_to_otlp_json
 from aura_runtime.policy import AuraSpec
 from aura_runtime.proxy import run_stdio_proxy
@@ -143,7 +144,9 @@ def check(
         raise typer.BadParameter("events file is empty")
 
     store = SQLiteEventStore(db)
-    verifier = RuntimeVerifier(AuraSpec.from_yaml(policy))
+    spec = AuraSpec.from_yaml(policy)
+    events = [spec.bind_objects(event) for event in events]
+    verifier = RuntimeVerifier(spec)
     findings = verifier.verify(events)
     for event in events:
         store.append_event(event)
@@ -187,6 +190,36 @@ def export_otlp(
             SQLiteEventStore(db).protocol_records(run_id),
             include_content=include_content,
         )
+    except ValueError as error:
+        raise _as_cli_error(error) from error
+    _emit_json(payload, output)
+
+
+@app.command("export-ocel")
+def export_ocel(
+    db: DB_OPTION = Path(".aura/aura.db"),
+    output: Annotated[Path | None, typer.Option("--output")] = None,
+    run_ids: Annotated[
+        list[str] | None,
+        typer.Option("--run", help="Run ID to include; repeat to select multiple runs."),
+    ] = None,
+    include_identifiers: Annotated[
+        bool,
+        typer.Option(
+            "--include-identifiers",
+            help="Opt in to exporting original run and business-object identifiers.",
+        ),
+    ] = False,
+) -> None:
+    """Export structural agent evidence as privacy-safe OCEL 2.0 JSON."""
+    store = SQLiteEventStore(db)
+    events = (
+        store.all_events()
+        if run_ids is None
+        else [event for run_id in dict.fromkeys(run_ids) for event in store.events(run_id)]
+    )
+    try:
+        payload = events_to_ocel_json(events, include_identifiers=include_identifiers)
     except ValueError as error:
         raise _as_cli_error(error) from error
     _emit_json(payload, output)

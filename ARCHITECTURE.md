@@ -29,7 +29,7 @@ flowchart TD
 
 | Module | Responsibility |
 |---|---|
-| `models` | Canonical events and findings |
+| `models` | Canonical events, qualified business-object links, and findings |
 | `store` | SQLite WAL evidence and finding storage |
 | `policy` | AuraSpec schema, selectors, and YAML loading |
 | `verifier` | Online past/future temporal monitors and Z3-backed data constraints |
@@ -40,6 +40,7 @@ flowchart TD
 | `replay` | Read-only policy replay and behavioral comparison |
 | `contract` | CI regression verdicts over committed baselines |
 | `mcp_server` | Agent-accessible status and finding tools |
+| `ocel_export` | Privacy-safe OCEL 2.0 object-centric exchange |
 | `cli` | Local ingestion, verification, and reports |
 
 ## Near-term design

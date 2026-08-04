@@ -157,6 +157,17 @@ Inspect a captured prefix with `aura temporal-state <run-id> --policy aura.yaml`
 `--final` only when the prefix should be interpreted as a complete finite trace. See
 [finite-trace temporal monitoring](docs/temporal-monitoring.md).
 
+Canonical events can link actions to qualified business objects such as customers,
+documents, tickets, or repositories. Export one or many runs as an OCEL 2.0 object-centric
+event log without exporting event payloads or raw identifiers by default:
+
+```bash
+aura export-ocel --db .aura/aura.db --run run-1 --run run-2 \
+  --output agent-evidence.jsonocel
+```
+
+See [OCEL 2.0 export](docs/ocel-export.md) for object annotation and privacy semantics.
+
 Run validation:
 
 ```bash
@@ -187,5 +198,5 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the system boundary and
 
 ## Status
 
-`0.9.0a1` is a research-grade foundation. The next milestones are general LTLf-to-automata
-compilation, object-centric process discovery, and OCEL 2.0 export.
+`0.10.0a1` is a research-grade foundation. The next milestones are general LTLf-to-automata
+compilation and object-centric process discovery over exported evidence.
