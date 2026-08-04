@@ -20,6 +20,7 @@ Aura's first vertical slice provides:
 - MCP JSON-RPC and OTLP/JSON adapters;
 - declarative `AuraSpec` policies with temporal prerequisites;
 - exact LTLf progression monitors with four-valued prefix verdicts;
+- event-feasible LTLf shielding and finite-trace strategy synthesis;
 - Z3-backed constraints over tool arguments and state;
 - deterministic findings with evidence event IDs;
 - a Typer CLI and an MCP server for querying the runtime.
@@ -264,6 +265,6 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the system boundary and
 
 ## Status
 
-`0.16.0a1` is a research-grade foundation. The next milestones are signed evidence
+`0.17.0a1` is a research-grade foundation. The next milestones are signed evidence
 bundles, symbolic proposition handling for larger formulas, and richer conformance beyond
 directly-follows structure.

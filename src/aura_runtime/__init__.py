@@ -1,5 +1,6 @@
 """Aura Runtime public API."""
 
+from aura_runtime.alphabet import EventAlphabet, EventAlphabetReport
 from aura_runtime.contract import ContractReport, TraceContract, check_contract
 from aura_runtime.flight import EnforcementMode, MCPFlightRecorder
 from aura_runtime.models import AgentEvent, EventKind, Finding, GateAction, ObjectRef, Severity
@@ -33,6 +34,8 @@ __all__ = [
     "ContractReport",
     "EventKind",
     "EnforcementMode",
+    "EventAlphabet",
+    "EventAlphabetReport",
     "Finding",
     "GateAction",
     "MCPFlightRecorder",
@@ -60,4 +63,4 @@ __all__ = [
     "discover_object_behavior",
 ]
 
-__version__ = "0.16.0a1"
+__version__ = "0.17.0a1"
