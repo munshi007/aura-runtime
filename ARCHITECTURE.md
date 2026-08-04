@@ -69,6 +69,11 @@ from the canonical event, assesses the proposed transition, and commits it to ac
 only if the request is forwarded. Reports replace raw identities with contract-scoped SHA-256
 pseudonyms. The contract hash detects content changes; it is not an author signature.
 
+LTLf shielding is control-aware at the same boundary. Agent propositions may be changed in
+repair alternatives; environment and observation-only propositions remain fixed. Unspecified
+ownership is observation-only. This prevents a logical counterfactual, such as changing a
+human approval fact, from being presented as an executable agent action.
+
 ## Replay identity
 
 Replay does not compare regenerated finding IDs or timestamps. A finding's deterministic

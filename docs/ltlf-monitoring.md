@@ -24,7 +24,15 @@ ltlf_policies:
         event: human.approval
         where:
           data.approved: true
+    proposition_control:
+      delete: agent
+      approval: environment
 ```
+
+`proposition_control` separates `agent`, `environment`, and `observed` facts. Unspecified
+propositions default to `observed`, so Aura never assumes it can change them. This is a
+conservative compatibility rule: existing policies still monitor normally, but actionable
+repairs require explicit ownership.
 
 Supported syntax is `!`, `&`, `|`, `->`, `<->`, strong next `X`, weak next `Xw`,
 eventually `F`, always `G`, until `U`, and release `R`. Word forms `not`, `and`, and `or`
@@ -75,9 +83,11 @@ aura shield-action <run-id> --policy aura.yaml --event proposed-event.json
 ```
 
 The report classifies the proposal as `safe` or `permanently_violating`. For a violating
-proposal, Aura enumerates the nearest safe proposition valuations by Hamming distance and
-reports which propositions must change. The MCP tool `aura_shield_action` exposes the same
-read-only structured report.
+proposal, Aura enumerates the nearest safe valuations by Hamming distance while holding
+environment and observed propositions fixed. Environment changes that could unblock a
+future action are reported separately as requirements. The policy decision distinguishes
+`allow`, `suppress`, `substitute`, `request_approval`, and `no_safe_action`. The MCP tool
+`aura_shield_action` exposes the same read-only structured report.
 
 In enforce mode the proxy attaches this report to `error.data.aura.shield`. A rejected
 attempt remains auditable evidence but does not advance accepted LTLf state. Repair values

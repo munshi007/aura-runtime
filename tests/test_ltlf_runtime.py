@@ -43,6 +43,10 @@ def spec(formula: str, *, effect: str = "deny") -> AuraSpec:
                             "where": {"data.approved": True},
                         },
                     },
+                    "proposition_control": {
+                        "delete": "agent",
+                        "approval": "environment",
+                    },
                 }
             ],
         }
@@ -53,6 +57,10 @@ def test_formula_only_spec_and_undefined_proposition_validation() -> None:
     assert spec("G !delete").policies == []
     with pytest.raises(ValidationError, match="undefined propositions: missing"):
         spec("F missing")
+    payload = spec("G !delete").model_dump(mode="json")
+    payload["ltlf_policies"][0]["proposition_control"]["ghost"] = "agent"
+    with pytest.raises(ValidationError, match="proposition_control references undefined"):
+        AuraSpec.model_validate(payload)
 
 
 def test_safety_violation_is_emitted_at_earliest_conclusive_prefix() -> None:
@@ -108,6 +116,7 @@ def test_flight_recorder_can_deny_a_permanently_violating_action(tmp_path) -> No
     assert result.action == GateAction.DENY
     assert result.shield is not None
     assert result.shield.safe is False
+    assert result.shield.policies[0].intervention == "suppress"
     assert result.response["error"]["data"]["aura.shield"]["safe"] is False
     assert result.findings[0].policy_id == "lifecycle"
 
@@ -132,6 +141,30 @@ def test_blocked_proposal_does_not_poison_accepted_ltlf_state(tmp_path) -> None:
 
     assert report.policies[0].monitor.prefix_verdict != "permanently_violated"
     assert report.policies[0].monitor.observed_event_count == 1
+
+
+def test_environment_approval_is_guidance_not_a_controllable_repair() -> None:
+    monitor = OnlineLTLfMonitor(spec("G approval"))
+    proposed = event(EventKind.STATE_CHANGED, 0)
+
+    report = monitor.preview(proposed)
+
+    decision = report.policies[0]
+    assert decision.intervention == "request_approval"
+    assert decision.follow_up == "request_approval"
+    assert decision.assessment.alternatives == []
+    assert decision.assessment.environment_requirements == [["approval"]]
+
+
+def test_repair_delays_action_while_waiting_for_environment_approval() -> None:
+    monitor = OnlineLTLfMonitor(spec("(!delete) U approval"))
+    proposed = event(EventKind.TOOL_CALL_REQUESTED, 0, tool_name="delete_customer")
+
+    decision = monitor.preview(proposed).policies[0]
+
+    assert decision.intervention == "delay"
+    assert decision.follow_up == "request_approval"
+    assert decision.assessment.alternatives[0].changed_propositions == ["delete"]
 
 
 def test_ltlf_state_cli_reports_prefix_and_final_verdict(tmp_path) -> None:
@@ -190,6 +223,8 @@ ltlf_policies:
       delete:
         event: tool.call.requested
         tool_matches: [delete_*]
+    proposition_control:
+      delete: agent
 """,
         encoding="utf-8",
     )
