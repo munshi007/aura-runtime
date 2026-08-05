@@ -29,6 +29,7 @@ from aura_runtime.object_contract import ObjectContract, ObjectContractMonitor
 from aura_runtime.object_process import compare_object_behavior, discover_object_behavior
 from aura_runtime.ocel_export import events_to_ocel_json
 from aura_runtime.otlp_export import protocol_records_to_otlp_json
+from aura_runtime.otlp_receiver import serve_otlp_http
 from aura_runtime.policy import AuraSpec
 from aura_runtime.proxy import run_stdio_proxy
 from aura_runtime.replay import compare_manifests, compare_runs, replay_run
@@ -177,6 +178,29 @@ def ingest_otlp(
     for event in events:
         store.append_event(event)
     typer.echo(f"Ingested {len(events)} Aura events from OTLP spans")
+
+
+@app.command("serve-otlp")
+def serve_otlp(
+    host: Annotated[str, typer.Option("--host")] = "127.0.0.1",
+    port: Annotated[int, typer.Option("--port", min=1, max=65535)] = 4318,
+    db: DB_OPTION = Path(".aura/aura.db"),
+    max_request_bytes: Annotated[
+        int, typer.Option("--max-request-bytes", min=1)
+    ] = 16 * 1024 * 1024,
+) -> None:
+    """Receive OTLP/HTTP JSON traces at /v1/traces."""
+
+    typer.echo(f"Aura OTLP receiver listening on http://{host}:{port}/v1/traces")
+    try:
+        serve_otlp_http(
+            host=host,
+            port=port,
+            db=db,
+            max_request_bytes=max_request_bytes,
+        )
+    except KeyboardInterrupt:
+        typer.echo("Stopped Aura OTLP receiver")
 
 
 @app.command("export-otlp")

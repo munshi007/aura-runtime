@@ -95,6 +95,26 @@ class SQLiteEventStore:
                 ),
             )
 
+    def append_event_once(self, event: AgentEvent) -> bool:
+        """Persist an event unless its deterministic identity already exists."""
+
+        self.initialize()
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """INSERT OR IGNORE INTO events(
+                       event_id, run_id, sequence, timestamp, kind, payload
+                   ) VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    str(event.event_id),
+                    event.run_id,
+                    event.sequence,
+                    event.timestamp.isoformat(),
+                    event.kind.value,
+                    event.model_dump_json(),
+                ),
+            )
+        return cursor.rowcount == 1
+
     def append_finding(self, finding: Finding) -> None:
         self.initialize()
         with self.connect() as connection:
