@@ -89,6 +89,11 @@ states with an agent valuation whose every environment successor has a lower win
 The solver is exact within explicit atom and state limits and never falls back to an
 approximate realizability verdict.
 
+Runtime strategy reports also construct one joint game for the conjunction of all configured
+LTLf policies. Equivalent selectors are unified across policies, and conflicting ownership is
+resolved away from agent control. The aggregate `all_realizable` verdict therefore means the
+entire contract bundle is jointly realizable, not merely that each rule passes in isolation.
+
 ## Replay identity
 
 Replay does not compare regenerated finding IDs or timestamps. A finding's deterministic
