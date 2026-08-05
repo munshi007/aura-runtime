@@ -274,6 +274,15 @@ uv run ruff check .
 uv run pytest
 ```
 
+Run the canonical end-to-end demo (no LLM or API key required):
+
+```bash
+uv run python examples/reference_agent/demo.py --output .aura-demo
+```
+
+It exercises a real MCP server through Aura's proxy and proves both a passing safe control
+and a rejected behavioral regression. See [the canonical demo](docs/canonical-demo.md).
+
 ## AuraSpec example
 
 ```yaml
