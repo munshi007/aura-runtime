@@ -292,11 +292,18 @@ policies:
         data.approved: true
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the system boundary and
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the system boundary,
+[THREAT_MODEL.md](THREAT_MODEL.md) for security assumptions, and
 [docs/research-direction.md](docs/research-direction.md) for the research thesis.
 
 ## Status
 
-`0.20.0a1` is a research-grade foundation. The next milestones are signed evidence
-bundles, symbolic proposition handling for larger formulas, and richer conformance beyond
-directly-follows structure.
+`0.23.0a1` is a research alpha. APIs, evidence schemas, and command behavior may change
+before `1.0`. It is not a certified security control: OTLP verification is retrospective,
+MCP enforcement covers only calls routed through the stdio proxy, and the local receiver
+does not provide authentication or TLS. See [SUPPORT.md](SUPPORT.md) for compatibility and
+support policy.
+
+Aura Runtime is licensed under [Apache-2.0](LICENSE). Contributions are welcome under
+[CONTRIBUTING.md](CONTRIBUTING.md). Please report vulnerabilities privately as described in
+[SECURITY.md](SECURITY.md), not in a public issue.

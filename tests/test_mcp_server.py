@@ -59,6 +59,10 @@ def test_mcp_status_tool(tmp_path) -> None:
                 "aura_trace_integrity",
                 {"run_id": "missing", "db_path": str(db_path)},
             )
+            protocol_integrity = await client.call_tool(
+                "aura_protocol_chain_integrity",
+                {"run_id": "missing", "db_path": str(db_path)},
+            )
         assert result.structured_content == {
             "status": "ready",
             "run_count": 0,
@@ -71,6 +75,7 @@ def test_mcp_status_tool(tmp_path) -> None:
             "valid": True,
             "head_hash": None,
         }
+        assert protocol_integrity.structured_content == integrity.structured_content
 
         store = SQLiteEventStore(db_path)
         store.append_event(

@@ -309,9 +309,7 @@ def aura_strategy_check(
     return monitor.strategy_report()
 
 
-@mcp.tool(annotations=READ_ONLY, structured_output=True)
-def aura_trace_integrity(run_id: str, db_path: str = ".aura/aura.db") -> dict[str, object]:
-    """Verify the hash chain for an MCP flight-recorder transcript."""
+def _protocol_chain_integrity(run_id: str, db_path: str) -> dict[str, object]:
     records = _store(db_path).protocol_records(run_id)
     return {
         "run_id": run_id,
@@ -319,6 +317,20 @@ def aura_trace_integrity(run_id: str, db_path: str = ".aura/aura.db") -> dict[st
         "valid": verify_protocol_chain(records),
         "head_hash": records[-1].content_hash if records else None,
     }
+
+
+@mcp.tool(annotations=READ_ONLY, structured_output=True)
+def aura_protocol_chain_integrity(
+    run_id: str, db_path: str = ".aura/aura.db"
+) -> dict[str, object]:
+    """Verify the hash chain for an MCP flight-recorder transcript."""
+    return _protocol_chain_integrity(run_id, db_path)
+
+
+@mcp.tool(annotations=READ_ONLY, structured_output=True)
+def aura_trace_integrity(run_id: str, db_path: str = ".aura/aura.db") -> dict[str, object]:
+    """Deprecated alias for aura_protocol_chain_integrity."""
+    return _protocol_chain_integrity(run_id, db_path)
 
 
 @mcp.tool(annotations=READ_ONLY, structured_output=True)
