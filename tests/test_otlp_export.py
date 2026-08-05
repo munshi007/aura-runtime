@@ -97,8 +97,10 @@ def test_mcp_error_sets_otel_error_status_and_round_trips() -> None:
     assert span["status"] == {"code": 2}
     assert attrs["error.type"] == "-32001"
     events = events_from_otlp_json(payload)
-    assert len(events) == 1
-    assert events[0].kind == EventKind.TOOL_CALL_FAILED
+    assert len(events) == 2
+    assert events[0].kind == EventKind.TOOL_CALL_REQUESTED
+    assert events[1].kind == EventKind.TOOL_CALL_FAILED
+    assert events[1].parent_event_id == events[0].event_id
     assert events[0].tool_name == "lookup"
 
 

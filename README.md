@@ -110,6 +110,16 @@ aura export-otlp <run-id> --db .aura/aura.db --output traces.json
 See [OTLP conformance export](docs/otlp-export.md) for the semantic mapping and explicit
 content opt-in.
 
+Import standard OpenTelemetry GenAI agent traces with no framework-specific code:
+
+```bash
+aura ingest-otlp traces.json --db .aura/aura.db
+```
+
+`invoke_agent`, `execute_tool`, and model-operation spans become Aura lifecycle events.
+Prompt messages, tool arguments, and tool results are discarded during import; no LLM or
+API key is required.
+
 Replay reports separate introduced, resolved, and unchanged findings. Run diffs identify
 the common prefix and first divergent event while ignoring timestamps, generated IDs, and
 run IDs. Manifest diffs detect added, removed, and schema-changed tools.

@@ -39,7 +39,7 @@ flowchart TD
 | `strategy_backend` | Replaceable finite-trace game-solving protocol and reference solver |
 | `partial_observation` | Belief-state synthesis with hidden inputs universally quantified |
 | `adapters.mcp` | MCP JSON-RPC normalization and correlation |
-| `adapters.otel` | OTLP/JSON span normalization |
+| `adapters.otel` | Privacy-safe OTLP/JSON GenAI lifecycle reconstruction |
 | `flight` | Hash-chained MCP transcript and policy decisions |
 | `proxy` | Transparent MCP stdio process boundary |
 | `replay` | Read-only policy replay and behavioral comparison |

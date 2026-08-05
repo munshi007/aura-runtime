@@ -1,5 +1,30 @@
 # OTLP conformance export
 
+## Import GenAI traces
+
+Aura also consumes an OTLP/HTTP JSON `ExportTraceServiceRequest` produced by agent
+framework instrumentation:
+
+```bash
+aura ingest-otlp traces.json --db .aura/aura.db
+```
+
+The importer reconstructs two boundary events from each completed duration span:
+
+| `gen_ai.operation.name` | Start event | End event |
+| --- | --- | --- |
+| `invoke_agent` | `run.started` | `run.completed` |
+| `execute_tool` | `tool.call.requested` | `tool.call.completed` or `tool.call.failed` |
+| `chat`, `generate_content`, `text_completion` | `model.requested` | `model.completed` |
+
+Event IDs are derived from the trace ID, span ID, and boundary, so importing the same
+payload repeatedly produces stable evidence identities. Sequences are assigned per run,
+not globally across a batch. Unrecognized spans remain `unknown` evidence instead of
+being guessed into a lifecycle.
+
+Import is retrospective observability: it can verify recorded behavior but cannot block
+an action that already happened. Use the MCP proxy for pre-execution enforcement.
+
 Aura can export a captured MCP transcript as an OTLP/HTTP JSON trace payload:
 
 ```bash
@@ -34,6 +59,12 @@ aura export-otlp <run-id> --include-content --output traces.json
 
 Review the destination's retention, access, and redaction controls before enabling this
 option.
+
+Import applies an allowlist independently of the exporter. Operational identity,
+correlation, model, provider, tool, token-count, server, and error attributes are kept.
+Content-bearing attributes—including `gen_ai.input.messages`, `gen_ai.output.messages`,
+`gen_ai.tool.call.arguments`, and `gen_ai.tool.call.result`—are discarded. Their names
+are recorded as redaction evidence, but their values never enter an `AgentEvent`.
 
 ## References
 
