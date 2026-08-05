@@ -64,6 +64,22 @@ rather than granting the agent control. Reports retain `all_individually_realiza
 the joint strategy and participating policy IDs, and define `all_realizable` using the joint
 result.
 
+## Partial observability
+
+Full-information realizability is insufficient when a strategy selects its next action using
+environment facts the deployed agent cannot see. Policies can mark these inputs through
+`proposition_visibility: {name: hidden}`.
+
+Aura then constructs belief states on demand. Each belief contains every residual formula
+consistent with the same observable history, universally quantifying hidden valuations during
+progression. A belief is accepting only when every possible residual accepts termination, and
+one controller action must win for every observable environment response and hidden state.
+
+The ordinary strategy remains available as the full-information baseline. The
+`partial_observation` report identifies observable and hidden proposition names, belief-state
+counts, a knowledge-safe strategy or observable counterstrategy, and never exposes which
+hidden valuation produced a losing belief. Aggregate realizability uses this stronger result.
+
 ## Interfaces
 
 Check a policy from its initial state:

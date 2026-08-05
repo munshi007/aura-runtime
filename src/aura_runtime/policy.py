@@ -153,6 +153,9 @@ class LTLfPolicy(BaseModel):
     proposition_control: dict[
         str, Literal["agent", "environment", "observed"]
     ] = Field(default_factory=dict)
+    proposition_visibility: dict[
+        str, Literal["observable", "hidden"]
+    ] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def formula_is_bound(self) -> LTLfPolicy:
@@ -170,11 +173,31 @@ class LTLfPolicy(BaseModel):
                 "proposition_control references undefined propositions: "
                 f"{', '.join(sorted(unknown_control))}"
             )
+        unknown_visibility = self.proposition_visibility.keys() - self.propositions.keys()
+        if unknown_visibility:
+            raise ValueError(
+                "proposition_visibility references undefined propositions: "
+                f"{', '.join(sorted(unknown_visibility))}"
+            )
+        hidden_agent = {
+            name
+            for name, visibility in self.proposition_visibility.items()
+            if visibility == "hidden" and self.control_of(name) == "agent"
+        }
+        if hidden_agent:
+            raise ValueError(
+                "agent-controlled propositions cannot be hidden: "
+                f"{', '.join(sorted(hidden_agent))}"
+            )
         return self
 
     def control_of(self, proposition: str) -> Literal["agent", "environment", "observed"]:
         """Return explicit ownership, defaulting conservatively to observation-only."""
         return self.proposition_control.get(proposition, "observed")
+
+    def visibility_of(self, proposition: str) -> Literal["observable", "hidden"]:
+        """Return explicit visibility, defaulting compatibly to observable."""
+        return self.proposition_visibility.get(proposition, "observable")
 
 
 class AuraSpec(BaseModel):

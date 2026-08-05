@@ -15,6 +15,7 @@ from aura_runtime.object_process import (
     compare_object_behavior,
     discover_object_behavior,
 )
+from aura_runtime.partial_observation import PartialObservationReport
 from aura_runtime.policy import AuraSpec
 from aura_runtime.replay import compare_manifests, compare_runs, replay_run
 from aura_runtime.store import SQLiteEventStore
@@ -54,6 +55,7 @@ __all__ = [
     "ObjectContractMonitor",
     "ObjectConformanceReport",
     "ObjectMonitorReport",
+    "PartialObservationReport",
     "RuntimeVerifier",
     "RuntimeStrategyReport",
     "ShieldActionReport",
@@ -71,4 +73,4 @@ __all__ = [
     "discover_object_behavior",
 ]
 
-__version__ = "0.19.0a1"
+__version__ = "0.20.0a1"

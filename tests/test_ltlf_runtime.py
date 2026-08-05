@@ -61,6 +61,10 @@ def test_formula_only_spec_and_undefined_proposition_validation() -> None:
     payload["ltlf_policies"][0]["proposition_control"]["ghost"] = "agent"
     with pytest.raises(ValidationError, match="proposition_control references undefined"):
         AuraSpec.model_validate(payload)
+    payload = spec("G !delete").model_dump(mode="json")
+    payload["ltlf_policies"][0]["proposition_visibility"]["ghost"] = "hidden"
+    with pytest.raises(ValidationError, match="proposition_visibility references undefined"):
+        AuraSpec.model_validate(payload)
 
 
 def test_safety_violation_is_emitted_at_earliest_conclusive_prefix() -> None:
@@ -175,6 +179,89 @@ def test_runtime_strategy_report_distinguishes_guarantee_from_cooperation() -> N
     assert agent.policies[0].strategy.status == "realizable"
     assert environment.all_realizable is False
     assert environment.policies[0].strategy.status == "cooperative_only"
+
+
+def test_partial_observation_rejects_strategy_that_depends_on_hidden_fact() -> None:
+    policy = AuraSpec.model_validate(
+        {
+            "version": "0.1",
+            "ltlf_policies": [
+                {
+                    "id": "hidden-choice",
+                    "description": "Next choice must match a hidden fact",
+                    "formula": "(secret & X choose) | (!secret & X !choose)",
+                    "propositions": {
+                        "secret": {
+                            "event": "state.changed",
+                            "where": {"data.secret": True},
+                        },
+                        "choose": {
+                            "event": "state.changed",
+                            "where": {"data.choose": True},
+                        },
+                    },
+                    "proposition_control": {
+                        "secret": "environment",
+                        "choose": "agent",
+                    },
+                    "proposition_visibility": {"secret": "hidden"},
+                }
+            ],
+        }
+    )
+
+    report = OnlineLTLfMonitor(policy).strategy_report()
+    item = report.policies[0]
+
+    assert item.strategy.status == "realizable"
+    assert item.partial_observation is not None
+    assert item.partial_observation.status == "unrealizable"
+    assert item.partial_observation.hidden_environment_propositions == ["secret"]
+    assert all(
+        move.true_observable_propositions == []
+        for move in item.partial_observation.counterstrategy
+    )
+    assert report.all_full_information_realizable is True
+    assert report.all_individually_realizable is False
+    assert report.all_realizable is False
+
+
+def test_partial_observation_extracts_strategy_independent_of_hidden_fact() -> None:
+    policy = AuraSpec.model_validate(
+        {
+            "version": "0.1",
+            "ltlf_policies": [
+                {
+                    "id": "hidden-irrelevant",
+                    "description": "Agent goal does not depend on the hidden fact",
+                    "formula": "F choose | F secret",
+                    "propositions": {
+                        "secret": {"event": "state.changed"},
+                        "choose": {"event": "tool.call.requested"},
+                    },
+                    "proposition_control": {
+                        "secret": "environment",
+                        "choose": "agent",
+                    },
+                    "proposition_visibility": {"secret": "hidden"},
+                }
+            ],
+        }
+    )
+
+    report = OnlineLTLfMonitor(policy).strategy_report().policies[0]
+
+    assert report.partial_observation is not None
+    assert report.partial_observation.status == "realizable"
+    assert report.partial_observation.strategy[0].true_agent_propositions == ["choose"]
+
+
+def test_hidden_agent_proposition_is_rejected() -> None:
+    payload = spec("F delete").model_dump(mode="json")
+    payload["ltlf_policies"][0]["proposition_visibility"] = {"delete": "hidden"}
+
+    with pytest.raises(ValidationError, match="agent-controlled propositions cannot be hidden"):
+        AuraSpec.model_validate(payload)
 
 
 def test_joint_strategy_detects_incompatible_individually_realizable_policies() -> None:

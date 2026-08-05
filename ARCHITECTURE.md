@@ -37,6 +37,7 @@ flowchart TD
 | `alphabet` | Conservative event-selector feasibility theory for Boolean valuations |
 | `valuation` | Solver-neutral valuation-space protocol and explicit reference backend |
 | `strategy_backend` | Replaceable finite-trace game-solving protocol and reference solver |
+| `partial_observation` | Belief-state synthesis with hidden inputs universally quantified |
 | `adapters.mcp` | MCP JSON-RPC normalization and correlation |
 | `adapters.otel` | OTLP/JSON span normalization |
 | `flight` | Hash-chained MCP transcript and policy decisions |
@@ -93,6 +94,11 @@ Runtime strategy reports also construct one joint game for the conjunction of al
 LTLf policies. Equivalent selectors are unified across policies, and conflicting ownership is
 resolved away from agent control. The aggregate `all_realizable` verdict therefore means the
 entire contract bundle is jointly realizable, not merely that each rule passes in isolation.
+
+Visibility is independent from control ownership. Hidden environment propositions are never
+included in counterstrategy content. Aura progresses every residual consistent with the same
+observable history into one belief state, so an accepted controller action must work for all
+hidden valuations rather than depending on inaccessible runtime facts.
 
 ## Replay identity
 
