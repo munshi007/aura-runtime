@@ -73,4 +73,4 @@ __all__ = [
     "discover_object_behavior",
 ]
 
-__version__ = "0.20.0a1"
+__version__ = "0.23.0a1"

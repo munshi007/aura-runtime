@@ -24,6 +24,10 @@ flowchart TD
 3. Policy evaluation is deterministic and does not require an LLM.
 4. Model-generated explanations may be added later, but never decide compliance.
 5. OpenTelemetry is an import/export contract, not Aura's primary event database.
+6. Evidence inspection is content-free unless a caller explicitly opts into content export.
+
+Security assumptions and failure behavior are specified in [THREAT_MODEL.md](THREAT_MODEL.md).
+Durable design decisions are recorded in [docs/adr](docs/adr/README.md).
 
 ## Modules
 

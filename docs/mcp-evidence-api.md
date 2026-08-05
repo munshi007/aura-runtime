@@ -24,6 +24,7 @@ AURA_DB_PATH=.aura/aura.db uv run mcp run src/aura_runtime/mcp_server.py
 | `aura_ltlf_state` | Inspect exact LTLf prefix or finalized state | Formula residuals, verdicts, and evidence IDs only |
 | `aura_shield_action` | Preview an event and enumerate nearest safe valuations | Proposition names and verdicts; no payloads |
 | `aura_strategy_check` | Solve controller/environment games for LTLf policies | Winning regions, strategies, and counterstrategies |
+| `aura_protocol_chain_integrity` | Verify the MCP flight-recorder hash chain | Counts, validity, and the chain head hash only |
 | `aura_object_behavior` | Discover aggregate object lifecycles for run cohorts | Object types, activities, and counts; no object IDs |
 | `aura_object_conformance` | Compare trusted and candidate object behavior | Structural additions and removals only |
 | `aura_object_contract` | Validate a content-addressed object contract | Contract metadata and hash only |
@@ -34,6 +35,10 @@ All inspection tools declare MCP read-only, idempotent, closed-world annotations
 are structured so clients can validate and reason over them without parsing prose.
 Aura opens evidence databases in SQLite read-only mode, so inspection does not create a
 database, journal, or evidence record.
+
+`aura_trace_integrity` remains available as a deprecated compatibility alias for
+`aura_protocol_chain_integrity`. New integrations should use the explicit name; the alias
+will not be removed before `0.25.0a1`.
 
 ## Privacy boundary
 
