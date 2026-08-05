@@ -21,6 +21,10 @@ from aura_runtime.ltlf import (
     rename_atoms,
 )
 from aura_runtime.models import AgentEvent, EventKind, Finding
+from aura_runtime.partial_observation import (
+    PartialObservationReport,
+    synthesize_partial_observation,
+)
 from aura_runtime.policy import (
     AuraSpec,
     DataConstraint,
@@ -404,6 +408,7 @@ class PolicyStrategyReport(BaseModel):
     description: str
     alphabet: EventAlphabetReport
     strategy: LTLfStrategyReport
+    partial_observation: PartialObservationReport | None
 
 
 class JointStrategyReport(BaseModel):
@@ -414,6 +419,7 @@ class JointStrategyReport(BaseModel):
     policy_ids: list[str]
     alphabet: EventAlphabetReport
     strategy: LTLfStrategyReport
+    partial_observation: PartialObservationReport | None
 
 
 class RuntimeStrategyReport(BaseModel):
@@ -425,6 +431,7 @@ class RuntimeStrategyReport(BaseModel):
     observed_event_count: int = Field(ge=0)
     policies: list[PolicyStrategyReport]
     joint: JointStrategyReport | None
+    all_full_information_realizable: bool
     all_individually_realizable: bool
     all_realizable: bool
     content_included: Literal[False] = False
@@ -551,23 +558,46 @@ class OnlineLTLfMonitor:
         for policy in self.spec.ltlf_policies:
             monitor = self._monitors[policy.id]
             alphabet = EventAlphabet(policy, monitor.propositions)
+            agent_propositions = {
+                name
+                for name in monitor.propositions
+                if policy.control_of(name) == "agent"
+            }
+            hidden_propositions = {
+                name
+                for name in monitor.propositions
+                if policy.visibility_of(name) == "hidden"
+            }
             policies.append(
                 PolicyStrategyReport(
                     policy_id=policy.id,
                     description=policy.description,
                     alphabet=alphabet.report(),
                     strategy=monitor.synthesize_strategy(
-                        {
-                            name
-                            for name in monitor.propositions
-                            if policy.control_of(name) == "agent"
-                        },
+                        agent_propositions,
                         valuation_space=alphabet,
+                    ),
+                    partial_observation=(
+                        synthesize_partial_observation(
+                            monitor,
+                            agent_propositions,
+                            set(monitor.propositions)
+                            - agent_propositions
+                            - hidden_propositions,
+                            alphabet,
+                        )
+                        if hidden_propositions
+                        else None
                     ),
                 )
             )
-        individually_realizable = all(
+        full_information_realizable = all(
             item.strategy.status == "realizable" for item in policies
+        )
+        individually_realizable = full_information_realizable and all(
+            item.partial_observation is None
+            or item.partial_observation.status == "realizable"
+            for item in policies
         )
         joint = self._joint_strategy_report()
         return RuntimeStrategyReport(
@@ -575,9 +605,14 @@ class OnlineLTLfMonitor:
             observed_event_count=len(self._history),
             policies=policies,
             joint=joint,
+            all_full_information_realizable=full_information_realizable,
             all_individually_realizable=individually_realizable,
             all_realizable=(
                 joint.strategy.status == "realizable"
+                and (
+                    joint.partial_observation is None
+                    or joint.partial_observation.status == "realizable"
+                )
                 if joint is not None
                 else individually_realizable
             ),
@@ -590,6 +625,7 @@ class OnlineLTLfMonitor:
         selector_names: dict[str, str] = {}
         selectors: dict[str, EventSelector] = {}
         controls: dict[str, list[str]] = {}
+        visibilities: dict[str, list[str]] = {}
         residuals: list[Formula] = []
         for policy in self.spec.ltlf_policies:
             monitor = self._monitors[policy.id]
@@ -602,6 +638,9 @@ class OnlineLTLfMonitor:
                 )
                 selectors[synthetic] = selector
                 controls.setdefault(synthetic, []).append(policy.control_of(proposition))
+                visibilities.setdefault(synthetic, []).append(
+                    policy.visibility_of(proposition)
+                )
                 names[proposition] = synthetic
             residuals.append(rename_atoms(monitor.residual, names))
         joint_formula = make_and(*residuals)
@@ -609,25 +648,48 @@ class OnlineLTLfMonitor:
             name: "agent" if set(owners) == {"agent"} else "observed"
             for name, owners in controls.items()
         }
+        proposition_visibility = {
+            name: "hidden" if "hidden" in values else "observable"
+            for name, values in visibilities.items()
+        }
         policy = LTLfPolicy(
             id="joint",
             description="Conjunction of configured LTLf policies",
             formula=str(joint_formula),
             propositions=selectors,
             proposition_control=proposition_control,
+            proposition_visibility=proposition_visibility,
         )
         monitor = LTLfMonitor(joint_formula)
         alphabet = EventAlphabet(policy, monitor.propositions)
+        agent_propositions = {
+            name
+            for name in monitor.propositions
+            if policy.control_of(name) == "agent"
+        }
+        hidden_propositions = {
+            name
+            for name in monitor.propositions
+            if policy.visibility_of(name) == "hidden"
+        }
         return JointStrategyReport(
             policy_ids=[item.id for item in self.spec.ltlf_policies],
             alphabet=alphabet.report(),
             strategy=monitor.synthesize_strategy(
-                {
-                    name
-                    for name in monitor.propositions
-                    if policy.control_of(name) == "agent"
-                },
+                agent_propositions,
                 valuation_space=alphabet,
+            ),
+            partial_observation=(
+                synthesize_partial_observation(
+                    monitor,
+                    agent_propositions,
+                    set(monitor.propositions)
+                    - agent_propositions
+                    - hidden_propositions,
+                    alphabet,
+                )
+                if hidden_propositions
+                else None
             ),
         )
 

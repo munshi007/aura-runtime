@@ -34,6 +34,15 @@ propositions default to `observed`, so Aura never assumes it can change them. Th
 conservative compatibility rule: existing policies still monitor normally, but actionable
 repairs require explicit ownership.
 
+`proposition_visibility` independently marks non-agent propositions as `observable` or
+`hidden`. Visibility defaults to `observable` for compatibility. Agent-controlled
+propositions cannot be hidden because the controller necessarily knows its own output.
+
+```yaml
+    proposition_visibility:
+      fraud_signal: hidden
+```
+
 Supported syntax is `!`, `&`, `|`, `->`, `<->`, strong next `X`, weak next `Xw`,
 eventually `F`, always `G`, until `U`, and release `R`. Word forms `not`, `and`, and `or`
 are also accepted.

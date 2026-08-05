@@ -44,6 +44,10 @@ or search-based solvers.
 Policy bundles are now checked compositionally as one conjunction game. This closes the gap
 where individually realizable rules can still be mutually incompatible, while preserving
 per-policy diagnostics for attribution.
+Policies can also declare hidden environment propositions. Aura performs exact on-demand
+belief progression and requires one controller action to succeed across all residuals
+consistent with the observable history, closing the full-information strategy gap without
+leaking hidden valuations into evidence.
 It does not yet claim LDLf, symbolic automata for high-dimensional proposition sets,
 object-centric Petri-net discovery, statistical drift thresholds, digital authorship
 signatures, or inferred concurrency. Those remain explicit extension milestones.
