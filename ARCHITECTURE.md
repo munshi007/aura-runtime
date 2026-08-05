@@ -41,6 +41,7 @@ flowchart TD
 | `adapters.mcp` | MCP JSON-RPC normalization and correlation |
 | `adapters.otel` | Privacy-safe OTLP/JSON GenAI lifecycle reconstruction |
 | `otlp_receiver` | Bounded, idempotent OTLP/HTTP JSON ingestion transport |
+| `trace_integrity` | Causal closure and structural trust checks for OTLP evidence |
 | `flight` | Hash-chained MCP transcript and policy decisions |
 | `proxy` | Transparent MCP stdio process boundary |
 | `replay` | Read-only policy replay and behavioral comparison |

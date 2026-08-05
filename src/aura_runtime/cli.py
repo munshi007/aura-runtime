@@ -34,6 +34,7 @@ from aura_runtime.policy import AuraSpec
 from aura_runtime.proxy import run_stdio_proxy
 from aura_runtime.replay import compare_manifests, compare_runs, replay_run
 from aura_runtime.store import SQLiteEventStore
+from aura_runtime.trace_integrity import analyze_otlp_trace_integrity
 from aura_runtime.verifier import OnlineLTLfMonitor, OnlineTemporalMonitor, RuntimeVerifier
 
 app = typer.Typer(help="Deterministic runtime verification for AI agents.", no_args_is_help=True)
@@ -178,6 +179,20 @@ def ingest_otlp(
     for event in events:
         store.append_event(event)
     typer.echo(f"Ingested {len(events)} Aura events from OTLP spans")
+
+
+@app.command("check-otlp")
+def check_otlp(
+    payload_path: Annotated[Path, typer.Argument(exists=True, readable=True)],
+    output: Annotated[Path | None, typer.Option("--output")] = None,
+) -> None:
+    """Check whether an OTLP batch is causally trustworthy evidence."""
+
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    report = analyze_otlp_trace_integrity(payload)
+    _emit_json(report.model_dump(mode="json"), output)
+    if not report.verification_ready:
+        raise typer.Exit(code=2)
 
 
 @app.command("serve-otlp")
