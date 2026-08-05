@@ -131,6 +131,15 @@ export OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/json
 The receiver is bound to localhost by default, accepts bounded JSON requests, and treats
 exporter retries idempotently.
 
+Before treating an exported trace as proof, check its causal integrity:
+
+```bash
+aura check-otlp traces.json
+```
+
+Aura distinguishes malformed evidence (`fail`) from incomplete or clock-skewed evidence
+(`inconclusive`). Only a causally closed, single-root trace is `verification_ready`.
+
 Replay reports separate introduced, resolved, and unchanged findings. Run diffs identify
 the common prefix and first divergent event while ignoring timestamps, generated IDs, and
 run IDs. Manifest diffs detect added, removed, and schema-changed tools.
