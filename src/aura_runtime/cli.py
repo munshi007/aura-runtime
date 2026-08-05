@@ -176,7 +176,7 @@ def ingest_otlp(
     store = SQLiteEventStore(db)
     for event in events:
         store.append_event(event)
-    typer.echo(f"Ingested {len(events)} OTLP spans")
+    typer.echo(f"Ingested {len(events)} Aura events from OTLP spans")
 
 
 @app.command("export-otlp")
