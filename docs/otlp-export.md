@@ -9,6 +9,25 @@ framework instrumentation:
 aura ingest-otlp traces.json --db .aura/aura.db
 ```
 
+For continuous ingestion, start Aura as an OTLP receiver and configure the existing
+OpenTelemetry exporter:
+
+```bash
+aura serve-otlp --db .aura/aura.db
+export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://127.0.0.1:4318/v1/traces
+export OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/json
+```
+
+No Aura SDK calls are added to the instrumented application. The receiver implements
+OTLP/HTTP JSON `POST /v1/traces` and exposes `GET /healthz`. It binds to `127.0.0.1`
+unless `--host` is explicitly changed, limits request bodies to 16 MiB by default, and
+returns permanent client errors for invalid JSON or unsupported media types. Use
+`--max-request-bytes` to set a deployment-specific bound.
+
+OTLP exporters may retry a request when delivery is uncertain. Aura's span-derived event
+IDs are deterministic, and receiver persistence ignores an already-stored identity, so a
+retry cannot duplicate evidence.
+
 The importer reconstructs two boundary events from each completed duration span:
 
 | `gen_ai.operation.name` | Start event | End event |
@@ -69,5 +88,6 @@ are recorded as redaction evidence, but their values never enter an `AgentEvent`
 ## References
 
 - [OTLP specification](https://opentelemetry.io/docs/specs/otlp/)
+- [OTLP exporter configuration](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/)
 - [OpenTelemetry GenAI execute-tool span](https://github.com/open-telemetry/semantic-conventions-genai/blob/main/reference/reports/execute-tool-span.md)
 - [OpenTelemetry GenAI semantic conventions](https://github.com/open-telemetry/semantic-conventions-genai)

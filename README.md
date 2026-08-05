@@ -120,6 +120,17 @@ aura ingest-otlp traces.json --db .aura/aura.db
 Prompt messages, tool arguments, and tool results are discarded during import; no LLM or
 API key is required.
 
+Or receive traces continuously on the standard OTLP/HTTP endpoint:
+
+```bash
+aura serve-otlp
+export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://127.0.0.1:4318/v1/traces
+export OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/json
+```
+
+The receiver is bound to localhost by default, accepts bounded JSON requests, and treats
+exporter retries idempotently.
+
 Replay reports separate introduced, resolved, and unchanged findings. Run diffs identify
 the common prefix and first divergent event while ignoring timestamps, generated IDs, and
 run IDs. Manifest diffs detect added, removed, and schema-changed tools.
