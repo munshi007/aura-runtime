@@ -35,6 +35,8 @@ flowchart TD
 | `verifier` | Online past/future temporal monitors and Z3-backed data constraints |
 | `ltlf` | LTLf parser, exact formula progression, and four-valued prefix semantics |
 | `alphabet` | Conservative event-selector feasibility theory for Boolean valuations |
+| `valuation` | Solver-neutral valuation-space protocol and explicit reference backend |
+| `strategy_backend` | Replaceable finite-trace game-solving protocol and reference solver |
 | `adapters.mcp` | MCP JSON-RPC normalization and correlation |
 | `adapters.otel` | OTLP/JSON span normalization |
 | `flight` | Hash-chained MCP transcript and policy decisions |
@@ -78,8 +80,10 @@ human approval fact, from being presented as an executable agent action.
 Offline strategy checking expands reachable residual formulas into a two-player game.
 Before expansion, the event alphabet removes valuations that cannot describe one canonical
 event, such as two different event kinds or contradictory exact payload values. The theory
-is injected as a valuation filter, so future symbolic-alphabet backends do not change LTLf
-syntax or progression semantics. Unknown glob relationships remain feasible.
+is injected through a valuation-space protocol. The Aura alphabet uses Z3 to generate
+feasible models directly; the explicit implementation remains a differential-test oracle.
+Unknown glob relationships remain feasible. A separate strategy-backend protocol keeps
+future BDD, SDD, or DPLL game solvers independent from LTLf syntax and report contracts.
 Accepting residuals form rank zero; the controller winning region is the least fixpoint of
 states with an agent valuation whose every environment successor has a lower winning rank.
 The solver is exact within explicit atom and state limits and never falls back to an

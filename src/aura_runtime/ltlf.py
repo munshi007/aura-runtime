@@ -13,6 +13,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from aura_runtime.strategy_backend import ExplicitProgressionBackend, StrategyBackend
+from aura_runtime.valuation import ExplicitValuationSpace, ValuationSpace
+
 
 class LTLfSyntaxError(ValueError):
     """Raised when an LTLf formula is not valid Aura syntax."""
@@ -452,6 +455,8 @@ class LTLfStrategyReport(BaseModel):
     cooperative_state_count: int = Field(ge=0)
     total_valuation_count: int = Field(ge=1)
     feasible_valuation_count: int = Field(ge=1)
+    valuation_backend: str
+    strategy_backend: str
     strategy: list[StrategyMove]
     cooperative_strategy: list[StrategyMove]
     counterstrategy: list[CounterStrategyState]
@@ -612,6 +617,27 @@ class LTLfMonitor:
         *,
         max_states: int | None = None,
         valuation_filter: Callable[[frozenset[str]], bool] | None = None,
+        valuation_space: ValuationSpace | None = None,
+        backend: StrategyBackend | None = None,
+    ) -> LTLfStrategyReport:
+        """Solve through a replaceable backend from the current residual."""
+        selected_backend = backend or ExplicitProgressionBackend()
+        return selected_backend.solve(
+            self,
+            controllable_propositions,
+            max_states=max_states,
+            valuation_filter=valuation_filter,
+            valuation_space=valuation_space,
+        )
+
+    def _synthesize_strategy_explicit(
+        self,
+        controllable_propositions: set[str] | frozenset[str],
+        *,
+        max_states: int | None,
+        valuation_filter: Callable[[frozenset[str]], bool] | None,
+        valuation_space: ValuationSpace | None,
+        strategy_backend: str,
     ) -> LTLfStrategyReport:
         """Solve the exact finite reachability game from the current residual."""
         controllable = frozenset(controllable_propositions)
@@ -619,33 +645,28 @@ class LTLfMonitor:
         if unknown:
             raise ValueError(f"unknown controllable propositions: {', '.join(sorted(unknown))}")
         environment = frozenset(set(self.propositions) - controllable)
-        agent_values = tuple(
-            frozenset(
-                name
-                for name, enabled in zip(sorted(controllable), bits, strict=True)
-                if enabled
-            )
-            for bits in product((False, True), repeat=len(controllable))
+        if valuation_space is not None and valuation_filter is not None:
+            raise ValueError("provide valuation_space or valuation_filter, not both")
+        space = valuation_space or ExplicitValuationSpace(
+            self.propositions, predicate=valuation_filter
         )
-        environment_values = tuple(
-            frozenset(
-                name
-                for name, enabled in zip(sorted(environment), bits, strict=True)
-                if enabled
-            )
-            for bits in product((False, True), repeat=len(environment))
-        )
+        if tuple(sorted(space.propositions)) != self.propositions:
+            raise ValueError("valuation space propositions do not match the formula")
+        joint_values = tuple(space.valuations())
+        if not joint_values:
+            raise ValueError("valuation space must contain at least one valuation")
+        grouped_responses: dict[frozenset[str], set[frozenset[str]]] = {}
+        for valuation in joint_values:
+            if not valuation <= set(self.propositions):
+                raise ValueError("valuation space produced unknown propositions")
+            agent_value = valuation & controllable
+            grouped_responses.setdefault(agent_value, set()).add(valuation & environment)
         feasible_responses = {
-            agent_value: tuple(
-                environment_value
-                for environment_value in environment_values
-                if valuation_filter is None
-                or valuation_filter(agent_value | environment_value)
-            )
-            for agent_value in agent_values
+            agent_value: tuple(sorted(values, key=lambda item: tuple(sorted(item))))
+            for agent_value, values in grouped_responses.items()
         }
         available_agent_values = tuple(
-            agent_value for agent_value in agent_values if feasible_responses[agent_value]
+            sorted(feasible_responses, key=lambda item: tuple(sorted(item)))
         )
         state_limit = max_states or self.max_states
         queue = deque([self.residual])
@@ -733,6 +754,8 @@ class LTLfMonitor:
             feasible_valuation_count=sum(
                 len(values) for values in feasible_responses.values()
             ),
+            valuation_backend=space.backend,
+            strategy_backend=strategy_backend,
             strategy=strategy,
             cooperative_strategy=cooperative_strategy,
             counterstrategy=counterstrategy,

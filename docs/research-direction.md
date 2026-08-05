@@ -37,6 +37,10 @@ Strategy and shielding now share a conservative event-alphabet theory, preventin
 solver from winning through Boolean valuations that no single canonical event can produce.
 The feasibility predicate is an injected boundary intended for later symbolic-automata
 theories rather than a hard-coded dependency of the LTLf parser.
+The event-alphabet implementation now compiles structural selector conflicts into Z3 and
+enumerates satisfying valuations. Strategy solving is independently selected through a
+backend protocol; explicit progression remains the trusted reference for future symbolic
+or search-based solvers.
 It does not yet claim LDLf, symbolic automata for high-dimensional proposition sets,
 object-centric Petri-net discovery, statistical drift thresholds, digital authorship
 signatures, or inferred concurrency. Those remain explicit extension milestones.

@@ -18,6 +18,11 @@ or identical selectors assigned different truth values. Wildcards and other unde
 relationships remain feasible. Reports expose total, feasible, and rejected valuation
 counts with content-free reason codes.
 
+Aura's event alphabet compiles proven selector conflicts into Z3 and enumerates satisfying
+models rather than testing the full agent/environment Cartesian product. The solver then
+groups each joint model into its controller choice and permitted environment responses.
+An explicit valuation implementation remains available as a reference oracle.
+
 Residuals that accept the empty suffix are final states because the controller may terminate
 the finite trace there. Aura computes the least winning fixpoint:
 
@@ -68,5 +73,16 @@ key.
 
 The game is expanded on demand from the current residual. Aura stops with an explicit
 `LTLfComplexityError` when the configured state limit is exceeded. Future symbolic and
-compositional backends can replace explicit valuation enumeration without changing the
-report contract.
+compositional backends can replace Z3 model enumeration or the explicit progression game
+without changing the report contract.
+
+Reports identify both `valuation_backend` and `strategy_backend`, alongside feasible
+valuation and reachable-state counts. Run the scaling harness with:
+
+```bash
+uv run python benchmarks/strategy_scaling.py
+```
+
+The harness emits JSON containing elapsed time and peak traced memory for repeatable local
+comparisons. Timing is intentionally excluded from signed runtime reports because it is not
+deterministic evidence.

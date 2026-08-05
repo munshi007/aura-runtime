@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections import Counter
-from itertools import product
+from collections.abc import Iterator
+from itertools import combinations, product
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -32,9 +33,21 @@ class EventAlphabet:
     constraint is too complex to decide here.
     """
 
-    def __init__(self, policy: LTLfPolicy) -> None:
+    backend = "z3"
+
+    def __init__(
+        self,
+        policy: LTLfPolicy,
+        propositions: tuple[str, ...] | None = None,
+    ) -> None:
         self.policy = policy
-        self.propositions = tuple(sorted(policy.propositions))
+        selected = tuple(
+            sorted(policy.propositions if propositions is None else propositions)
+        )
+        unknown = set(selected) - set(policy.propositions)
+        if unknown:
+            raise ValueError(f"unknown propositions: {', '.join(sorted(unknown))}")
+        self.propositions = selected
 
     def rejection_reason(self, true_propositions: frozenset[str]) -> str | None:
         unknown = true_propositions - set(self.propositions)
@@ -79,6 +92,75 @@ class EventAlphabet:
 
     def is_feasible(self, true_propositions: frozenset[str]) -> bool:
         return self.rejection_reason(true_propositions) is None
+
+    def valuations(self) -> Iterator[frozenset[str]]:
+        """Enumerate feasible valuations from a symbolic selector theory."""
+        import z3
+
+        symbols = {name: z3.Bool(name) for name in self.propositions}
+        solver = z3.Solver()
+        selectors = self.policy.propositions
+        fingerprints = {
+            name: selectors[name].model_dump_json() for name in self.propositions
+        }
+        for left, right in combinations(self.propositions, 2):
+            left_selector = selectors[left]
+            right_selector = selectors[right]
+            incompatible = left_selector.event != right_selector.event or any(
+                path in right_selector.where and right_selector.where[path] != value
+                for path, value in left_selector.where.items()
+            )
+            if incompatible:
+                solver.add(z3.Or(z3.Not(symbols[left]), z3.Not(symbols[right])))
+            if fingerprints[left] == fingerprints[right]:
+                solver.add(symbols[left] == symbols[right])
+
+        exact_tool_sets = {
+            name: set(selector.tool_matches)
+            for name, selector in selectors.items()
+            if name in symbols
+            and selector.tool_matches
+            and all(
+                not any(symbol in pattern for symbol in "*?[")
+                for pattern in selector.tool_matches
+            )
+        }
+        wildcard_tool_symbols = [
+            symbols[name]
+            for name, selector in selectors.items()
+            if name in symbols
+            and any(
+                any(symbol in pattern for symbol in "*?[")
+                for pattern in selector.tool_matches
+            )
+        ]
+        for left, right in combinations(exact_tool_sets, 2):
+            if exact_tool_sets[left].isdisjoint(exact_tool_sets[right]):
+                solver.add(
+                    z3.Or(
+                        z3.Not(symbols[left]),
+                        z3.Not(symbols[right]),
+                        *wildcard_tool_symbols,
+                    )
+                )
+
+        while solver.check() == z3.sat:
+            model = solver.model()
+            valuation = frozenset(
+                name
+                for name, symbol in symbols.items()
+                if z3.is_true(model.eval(symbol, model_completion=True))
+            )
+            solver.add(
+                z3.Or(
+                    *[
+                        symbol != z3.BoolVal(name in valuation)
+                        for name, symbol in symbols.items()
+                    ]
+                )
+            )
+            if self.is_feasible(valuation):
+                yield valuation
 
     def report(self) -> EventAlphabetReport:
         reasons: Counter[str] = Counter()
