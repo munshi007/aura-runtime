@@ -21,6 +21,7 @@ from aura_runtime.store import SQLiteEventStore
 from aura_runtime.strategy_backend import ExplicitProgressionBackend, StrategyBackend
 from aura_runtime.valuation import ExplicitValuationSpace, ValuationSpace
 from aura_runtime.verifier import (
+    JointStrategyReport,
     LTLfRuntimeReport,
     OnlineLTLfMonitor,
     OnlineTemporalMonitor,
@@ -42,6 +43,7 @@ __all__ = [
     "ExplicitValuationSpace",
     "Finding",
     "GateAction",
+    "JointStrategyReport",
     "MCPFlightRecorder",
     "LTLfRuntimeReport",
     "OnlineLTLfMonitor",
@@ -69,4 +71,4 @@ __all__ = [
     "discover_object_behavior",
 ]
 
-__version__ = "0.18.0a1"
+__version__ = "0.19.0a1"

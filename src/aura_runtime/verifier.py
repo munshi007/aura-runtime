@@ -11,14 +11,24 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from aura_runtime.alphabet import EventAlphabet, EventAlphabetReport
 from aura_runtime.ltlf import (
+    Formula,
     LTLfMonitor,
     LTLfMonitorReport,
     LTLfShieldReport,
     LTLfStrategyReport,
     PrefixVerdict,
+    make_and,
+    rename_atoms,
 )
 from aura_runtime.models import AgentEvent, EventKind, Finding
-from aura_runtime.policy import AuraSpec, DataConstraint, LTLfPolicy, Policy, value_at_path
+from aura_runtime.policy import (
+    AuraSpec,
+    DataConstraint,
+    EventSelector,
+    LTLfPolicy,
+    Policy,
+    value_at_path,
+)
 
 
 class TemporalVerdict(StrEnum):
@@ -396,6 +406,16 @@ class PolicyStrategyReport(BaseModel):
     strategy: LTLfStrategyReport
 
 
+class JointStrategyReport(BaseModel):
+    """One strategy game for the conjunction of every configured LTLf policy."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    policy_ids: list[str]
+    alphabet: EventAlphabetReport
+    strategy: LTLfStrategyReport
+
+
 class RuntimeStrategyReport(BaseModel):
     """Game solutions for all LTLf policies at one accepted run prefix."""
 
@@ -404,6 +424,8 @@ class RuntimeStrategyReport(BaseModel):
     run_id: str | None
     observed_event_count: int = Field(ge=0)
     policies: list[PolicyStrategyReport]
+    joint: JointStrategyReport | None
+    all_individually_realizable: bool
     all_realizable: bool
     content_included: Literal[False] = False
 
@@ -544,12 +566,68 @@ class OnlineLTLfMonitor:
                     ),
                 )
             )
+        individually_realizable = all(
+            item.strategy.status == "realizable" for item in policies
+        )
+        joint = self._joint_strategy_report()
         return RuntimeStrategyReport(
             run_id=self._history[0].run_id if self._history else None,
             observed_event_count=len(self._history),
             policies=policies,
-            all_realizable=all(
-                item.strategy.status == "realizable" for item in policies
+            joint=joint,
+            all_individually_realizable=individually_realizable,
+            all_realizable=(
+                joint.strategy.status == "realizable"
+                if joint is not None
+                else individually_realizable
+            ),
+        )
+
+    def _joint_strategy_report(self) -> JointStrategyReport | None:
+        """Compose multiple accepted residuals into one compatibility game."""
+        if len(self.spec.ltlf_policies) < 2:
+            return None
+        selector_names: dict[str, str] = {}
+        selectors: dict[str, EventSelector] = {}
+        controls: dict[str, list[str]] = {}
+        residuals: list[Formula] = []
+        for policy in self.spec.ltlf_policies:
+            monitor = self._monitors[policy.id]
+            names: dict[str, str] = {}
+            for proposition in monitor.propositions:
+                selector = policy.propositions[proposition]
+                fingerprint = selector.model_dump_json()
+                synthetic = selector_names.setdefault(
+                    fingerprint, f"p{len(selector_names)}"
+                )
+                selectors[synthetic] = selector
+                controls.setdefault(synthetic, []).append(policy.control_of(proposition))
+                names[proposition] = synthetic
+            residuals.append(rename_atoms(monitor.residual, names))
+        joint_formula = make_and(*residuals)
+        proposition_control = {
+            name: "agent" if set(owners) == {"agent"} else "observed"
+            for name, owners in controls.items()
+        }
+        policy = LTLfPolicy(
+            id="joint",
+            description="Conjunction of configured LTLf policies",
+            formula=str(joint_formula),
+            propositions=selectors,
+            proposition_control=proposition_control,
+        )
+        monitor = LTLfMonitor(joint_formula)
+        alphabet = EventAlphabet(policy, monitor.propositions)
+        return JointStrategyReport(
+            policy_ids=[item.id for item in self.spec.ltlf_policies],
+            alphabet=alphabet.report(),
+            strategy=monitor.synthesize_strategy(
+                {
+                    name
+                    for name in monitor.propositions
+                    if policy.control_of(name) == "agent"
+                },
+                valuation_space=alphabet,
             ),
         )
 

@@ -177,6 +177,71 @@ def test_runtime_strategy_report_distinguishes_guarantee_from_cooperation() -> N
     assert environment.policies[0].strategy.status == "cooperative_only"
 
 
+def test_joint_strategy_detects_incompatible_individually_realizable_policies() -> None:
+    item = {
+        "description": "Joint strategy rule",
+        "propositions": {
+            "act": {
+                "event": "tool.call.requested",
+                "tool_matches": ["act"],
+            }
+        },
+        "proposition_control": {"act": "agent"},
+    }
+    policy = AuraSpec.model_validate(
+        {
+            "version": "0.1",
+            "ltlf_policies": [
+                {**item, "id": "eventually-act", "formula": "F act"},
+                {**item, "id": "never-act", "formula": "G !act"},
+            ],
+        }
+    )
+
+    report = OnlineLTLfMonitor(policy).strategy_report()
+
+    assert report.all_individually_realizable is True
+    assert [item.strategy.status for item in report.policies] == [
+        "realizable",
+        "realizable",
+    ]
+    assert report.joint is not None
+    assert report.joint.policy_ids == ["eventually-act", "never-act"]
+    assert report.joint.strategy.status == "unachievable"
+    assert report.all_realizable is False
+
+
+def test_joint_strategy_resolves_shared_selector_ownership_conservatively() -> None:
+    base = {
+        "description": "Shared selector ownership",
+        "formula": "F act",
+        "propositions": {"act": {"event": "tool.call.requested"}},
+    }
+    policy = AuraSpec.model_validate(
+        {
+            "version": "0.1",
+            "ltlf_policies": [
+                {
+                    **base,
+                    "id": "agent-view",
+                    "proposition_control": {"act": "agent"},
+                },
+                {
+                    **base,
+                    "id": "environment-view",
+                    "proposition_control": {"act": "environment"},
+                },
+            ],
+        }
+    )
+
+    report = OnlineLTLfMonitor(policy).strategy_report()
+
+    assert report.joint is not None
+    assert report.joint.strategy.agent_propositions == []
+    assert report.joint.strategy.status == "cooperative_only"
+
+
 def test_ltlf_state_cli_reports_prefix_and_final_verdict(tmp_path) -> None:
     db_path = tmp_path / "aura.db"
     SQLiteEventStore(db_path).append_event(event(EventKind.RUN_STARTED, 0))

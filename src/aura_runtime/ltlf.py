@@ -276,6 +276,19 @@ def atoms(formula: Formula) -> frozenset[str]:
     return frozenset().union(*(atoms(item) for item in formula.args))
 
 
+def rename_atoms(formula: Formula, names: dict[str, str]) -> Formula:
+    """Return an equivalent formula with atom names replaced recursively."""
+    if formula.op in {"atom", "not_atom"}:
+        return Formula(formula.op, name=names.get(formula.name, formula.name))
+    if not formula.args:
+        return formula
+    return Formula(
+        formula.op,
+        tuple(rename_atoms(argument, names) for argument in formula.args),
+        name=formula.name,
+    )
+
+
 def progress(formula: Formula, true_atoms: frozenset[str]) -> Formula:
     """Compute one deterministic residual state after observing a valuation."""
     if formula in {TRUE, FALSE}:

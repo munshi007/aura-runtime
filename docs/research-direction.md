@@ -41,6 +41,9 @@ The event-alphabet implementation now compiles structural selector conflicts int
 enumerates satisfying valuations. Strategy solving is independently selected through a
 backend protocol; explicit progression remains the trusted reference for future symbolic
 or search-based solvers.
+Policy bundles are now checked compositionally as one conjunction game. This closes the gap
+where individually realizable rules can still be mutually incompatible, while preserving
+per-policy diagnostics for attribution.
 It does not yet claim LDLf, symbolic automata for high-dimensional proposition sets,
 object-centric Petri-net discovery, statistical drift thresholds, digital authorship
 signatures, or inferred concurrency. Those remain explicit extension milestones.

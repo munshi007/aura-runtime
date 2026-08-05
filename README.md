@@ -21,6 +21,7 @@ Aura's first vertical slice provides:
 - declarative `AuraSpec` policies with temporal prerequisites;
 - exact LTLf progression monitors with four-valued prefix verdicts;
 - event-feasible LTLf shielding and finite-trace strategy synthesis;
+- joint synthesis that detects incompatible policy bundles;
 - Z3-backed constraints over tool arguments and state;
 - deterministic findings with evidence event IDs;
 - a Typer CLI and an MCP server for querying the runtime.
@@ -265,6 +266,6 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the system boundary and
 
 ## Status
 
-`0.18.0a1` is a research-grade foundation. The next milestones are signed evidence
+`0.19.0a1` is a research-grade foundation. The next milestones are signed evidence
 bundles, symbolic proposition handling for larger formulas, and richer conformance beyond
 directly-follows structure.

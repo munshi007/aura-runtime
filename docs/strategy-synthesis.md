@@ -51,6 +51,19 @@ residual. For unrealizable policies, `counterstrategy` maps every controller val
 losing state to an environment response that remains losing. These artifacts are
 machine-checkable and content-free.
 
+## Contract-bundle compatibility
+
+For two or more LTLf policies, Aura also synthesizes their conjunction from the current
+accepted prefix. Two policies may each be realizable while requiring mutually incompatible
+actions, so independent success is not sufficient evidence that a deployment can satisfy the
+whole contract.
+
+Equivalent event selectors share one synthetic proposition in the joint game. If policies
+assign conflicting ownership to that selector, Aura resolves it conservatively as observed
+rather than granting the agent control. Reports retain `all_individually_realizable`, expose
+the joint strategy and participating policy IDs, and define `all_realizable` using the joint
+result.
+
 ## Interfaces
 
 Check a policy from its initial state:
